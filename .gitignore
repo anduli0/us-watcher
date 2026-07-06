@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Env / secrets — NEVER commit
+.env
+.env.local
+.env.*.local
+
+# Databases (local SQLite)
+*.db
+*.db-shm
+*.db-wal
+
+# Node / Next.js
+node_modules/
+apps/web/.next/
+apps/web/out/
+apps/web/.turbo/
+
+# Logs
+logs/
+*.log
+
+# Generated daily-brief markdown archive (DB is source of truth)
+briefs/
+
+# Supervisor single-instance lockfiles
+.locks/
+
+# OS
+.DS_Store
+Thumbs.db
+.secrets-local.txt
+
+# Root-level runtime logs (may contain request URLs / tokens) — never commit
+logs_*.txt
+
+# Local research / pipeline scratch outputs (regenerated on demand)
+signal_lab_results.json
+us_context.json
+us_narrative.json
+
+# NOTE: apps/web/public/data (the baked static snapshot) IS committed on purpose
+# — it is the site's content, served 24/7 from the CDN.

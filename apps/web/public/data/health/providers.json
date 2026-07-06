@@ -1,0 +1,1 @@
+{"database":"ok","redis":{"backend":"fakeredis","connected":true,"detail":""},"market_data":"yahoo","macro":"fred-keyless","news":"google","llm":"configured"}

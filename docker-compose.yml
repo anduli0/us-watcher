@@ -1,0 +1,56 @@
+# US-WATCHER full stack. NOTE: drafted but NOT verified in this environment
+# (no Docker daemon available). Validate on a Docker host before relying on it.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: usw
+      POSTGRES_PASSWORD: usw
+      POSTGRES_DB: us_watcher
+    ports: ["5432:5432"]
+    volumes: ["usw_pg:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U usw"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: { context: ., dockerfile: Dockerfile }
+    environment:
+      DATABASE_URL: postgresql+asyncpg://usw:usw@db:5432/us_watcher
+      MARKET_DATA_PROVIDER: yahoo
+      NEWS_PROVIDER: google
+      AGENT_RUNTIME: ${AGENT_RUNTIME:-mock}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CRON_SECRET: ${CRON_SECRET:-}
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-}
+      CORS_ALLOW_ORIGINS: "http://localhost:3000"
+    command: >
+      sh -c "python -m alembic upgrade head &&
+             python -m uvicorn main:app --app-dir apps/api --host 0.0.0.0 --port 8000"
+    ports: ["8000:8000"]
+    depends_on:
+      db: { condition: service_healthy }
+
+  worker:
+    build: { context: ., dockerfile: Dockerfile }
+    environment:
+      DATABASE_URL: postgresql+asyncpg://usw:usw@db:5432/us_watcher
+      MARKET_DATA_PROVIDER: yahoo
+      NEWS_PROVIDER: google
+      AGENT_RUNTIME: ${AGENT_RUNTIME:-mock}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    command: ["python", "apps/worker/main.py"]
+    depends_on:
+      db: { condition: service_healthy }
+
+  web:
+    build: { context: ., dockerfile: apps/web/Dockerfile }
+    environment:
+      API_PROXY_TARGET: http://api:8000
+    ports: ["3000:3000"]
+    depends_on: [api]
+
+volumes:
+  usw_pg:

@@ -1,0 +1,333 @@
+# US-WATCHER instrument universe. Seeds the `instruments` table and drives the
+# market-data fetch lists. `yahoo_symbol` is the symbol passed to the keyless
+# Yahoo provider; `symbol` is the canonical internal id.
+#
+# Index levels marked `is_proxy: true` (NYSE Composite, Nasdaq Composite) are
+# fetched via an explicitly-labelled tradable proxy when the raw index level is
+# not keyless-available, and surfaced in the UI as PROXY — never as the index.
+version: 1
+
+indices:
+  - {symbol: SPX,  yahoo_symbol: "^GSPC", name: "S&P 500",                 group: index,   market: SP500,  is_proxy: false}
+  - {symbol: NDX,  yahoo_symbol: "^NDX",  name: "Nasdaq-100",              group: index,   market: NASDAQ, is_proxy: false}
+  - {symbol: IXIC, yahoo_symbol: "^IXIC", name: "Nasdaq Composite",        group: index,   market: NASDAQ, is_proxy: false}
+  - {symbol: DJI,  yahoo_symbol: "^DJI",  name: "Dow Jones Industrial Avg",group: index,   market: DOW,    is_proxy: false}
+  - {symbol: NYA,  yahoo_symbol: "^NYA",  name: "NYSE Composite",          group: index,   market: NYSE,   is_proxy: false}
+  - {symbol: RUT,  yahoo_symbol: "^RUT",  name: "Russell 2000",            group: index,   market: SMALL,  is_proxy: false}
+  - {symbol: VIX,  yahoo_symbol: "^VIX",  name: "CBOE Volatility Index",   group: vol,     market: NA,     is_proxy: false}
+
+cross_assets:
+  - {symbol: US2Y, fred_series: "DGS2",   name: "US 2-Year Treasury Yield",  group: rates}
+  - {symbol: US10Y,fred_series: "DGS10",  name: "US 10-Year Treasury Yield", group: rates}
+  - {symbol: T10Y2Y, fred_series: "T10Y2Y", name: "10Y-2Y Spread",          group: rates}
+  - {symbol: DXY,  yahoo_symbol: "DX-Y.NYB", name: "US Dollar Index",       group: fx}
+  - {symbol: WTI,  yahoo_symbol: "CL=F",  name: "WTI Crude Oil",            group: commodity}
+  - {symbol: GOLD, yahoo_symbol: "GC=F",  name: "Gold",                     group: commodity}
+  - {symbol: BTC,  yahoo_symbol: "BTC-USD", name: "Bitcoin (risk sentiment)", group: crypto}
+
+# Index ETFs (cap-weight vs equal-weight, breadth proxies, semis)
+etfs_core:
+  - {symbol: SPY, yahoo_symbol: "SPY", name: "SPDR S&P 500 ETF",            asset_type: etf, benchmark_for: SP500}
+  - {symbol: RSP, yahoo_symbol: "RSP", name: "Invesco S&P 500 Equal Weight",asset_type: etf, benchmark_for: SP500_EW}
+  - {symbol: QQQ, yahoo_symbol: "QQQ", name: "Invesco QQQ (Nasdaq-100)",    asset_type: etf, benchmark_for: NASDAQ}
+  - {symbol: QQQE,yahoo_symbol: "QQQE",name: "Direxion NDX Equal Weight",   asset_type: etf, benchmark_for: NASDAQ_EW}
+  - {symbol: DIA, yahoo_symbol: "DIA", name: "SPDR Dow Jones ETF",          asset_type: etf, benchmark_for: DOW}
+  - {symbol: IWM, yahoo_symbol: "IWM", name: "iShares Russell 2000",        asset_type: etf, benchmark_for: SMALL}
+  - {symbol: MDY, yahoo_symbol: "MDY", name: "SPDR S&P MidCap 400",         asset_type: etf, benchmark_for: MID}
+  - {symbol: SMH, yahoo_symbol: "SMH", name: "VanEck Semiconductor ETF",    asset_type: etf, benchmark_for: SEMI}
+
+# 11 GICS sector SPDRs
+sectors:
+  - {symbol: XLK,  yahoo_symbol: "XLK",  name: "Technology",            gics: "Information Technology"}
+  - {symbol: XLC,  yahoo_symbol: "XLC",  name: "Communication Services",gics: "Communication Services"}
+  - {symbol: XLY,  yahoo_symbol: "XLY",  name: "Consumer Discretionary",gics: "Consumer Discretionary"}
+  - {symbol: XLP,  yahoo_symbol: "XLP",  name: "Consumer Staples",      gics: "Consumer Staples"}
+  - {symbol: XLE,  yahoo_symbol: "XLE",  name: "Energy",                gics: "Energy"}
+  - {symbol: XLF,  yahoo_symbol: "XLF",  name: "Financials",            gics: "Financials"}
+  - {symbol: XLV,  yahoo_symbol: "XLV",  name: "Health Care",           gics: "Health Care"}
+  - {symbol: XLI,  yahoo_symbol: "XLI",  name: "Industrials",           gics: "Industrials"}
+  - {symbol: XLB,  yahoo_symbol: "XLB",  name: "Materials",             gics: "Materials"}
+  - {symbol: XLRE, yahoo_symbol: "XLRE", name: "Real Estate",           gics: "Real Estate"}
+  - {symbol: XLU,  yahoo_symbol: "XLU",  name: "Utilities",             gics: "Utilities"}
+
+# Style / factor proxies for style-leadership classification
+styles:
+  - {symbol: IWF,  yahoo_symbol: "IWF",  name: "Russell 1000 Growth",  style: GROWTH}
+  - {symbol: IWD,  yahoo_symbol: "IWD",  name: "Russell 1000 Value",   style: VALUE}
+  - {symbol: MTUM, yahoo_symbol: "MTUM", name: "MSCI USA Momentum",    style: MOMENTUM}
+  - {symbol: QUAL, yahoo_symbol: "QUAL", name: "MSCI USA Quality",     style: QUALITY}
+  - {symbol: USMV, yahoo_symbol: "USMV", name: "MSCI USA Min Vol",     style: LOW_VOL}
+  - {symbol: VYM,  yahoo_symbol: "VYM",  name: "Vanguard High Dividend",style: HIGH_DIV}
+
+# Single-stock recommendation universe — liquid U.S. names across sectors and
+# themes (mega-cap, AI infrastructure, semis, software, financials, healthcare,
+# energy, industrials, consumer). `sector` maps to the GICS sector ETF for
+# sector-leadership; `benchmark` is the accuracy benchmark (SPY broad, QQQ growth).
+stocks:
+  - {symbol: AAPL,  name: "Apple",              sector: XLK,  benchmark: QQQ}
+  - {symbol: MSFT,  name: "Microsoft",          sector: XLK,  benchmark: QQQ}
+  - {symbol: NVDA,  name: "NVIDIA",             sector: XLK,  benchmark: QQQ}
+  - {symbol: GOOGL, name: "Alphabet",           sector: XLC,  benchmark: QQQ}
+  - {symbol: AMZN,  name: "Amazon",             sector: XLY,  benchmark: QQQ}
+  - {symbol: META,  name: "Meta Platforms",     sector: XLC,  benchmark: QQQ}
+  - {symbol: AVGO,  name: "Broadcom",           sector: XLK,  benchmark: QQQ}
+  - {symbol: TSLA,  name: "Tesla",              sector: XLY,  benchmark: QQQ}
+  - {symbol: ORCL,  name: "Oracle",             sector: XLK,  benchmark: QQQ}
+  - {symbol: NFLX,  name: "Netflix",            sector: XLC,  benchmark: QQQ}
+  - {symbol: AMD,   name: "Advanced Micro Devices", sector: XLK, benchmark: QQQ}
+  - {symbol: MU,    name: "Micron Technology",  sector: XLK,  benchmark: QQQ}
+  - {symbol: LRCX,  name: "Lam Research",       sector: XLK,  benchmark: QQQ}
+  - {symbol: AMAT,  name: "Applied Materials",  sector: XLK,  benchmark: QQQ}
+  - {symbol: ARM,   name: "Arm Holdings",       sector: XLK,  benchmark: QQQ}
+  - {symbol: ALAB,  name: "Astera Labs",        sector: XLK,  benchmark: QQQ}
+  - {symbol: MRVL,  name: "Marvell Technology", sector: XLK,  benchmark: QQQ}
+  - {symbol: SMCI,  name: "Super Micro Computer", sector: XLK, benchmark: QQQ}
+  - {symbol: VRT,   name: "Vertiv Holdings",    sector: XLI,  benchmark: QQQ}
+  - {symbol: ANET,  name: "Arista Networks",    sector: XLK,  benchmark: QQQ}
+  - {symbol: CRM,   name: "Salesforce",         sector: XLK,  benchmark: QQQ}
+  - {symbol: NOW,   name: "ServiceNow",         sector: XLK,  benchmark: QQQ}
+  - {symbol: PLTR,  name: "Palantir",           sector: XLK,  benchmark: QQQ}
+  - {symbol: SNOW,  name: "Snowflake",          sector: XLK,  benchmark: QQQ}
+  - {symbol: CRWD,  name: "CrowdStrike",        sector: XLK,  benchmark: QQQ}
+  - {symbol: PANW,  name: "Palo Alto Networks", sector: XLK,  benchmark: QQQ}
+  - {symbol: ADBE,  name: "Adobe",              sector: XLK,  benchmark: QQQ}
+  - {symbol: DDOG,  name: "Datadog",            sector: XLK,  benchmark: QQQ}
+  - {symbol: JPM,   name: "JPMorgan Chase",     sector: XLF,  benchmark: SPY}
+  - {symbol: BAC,   name: "Bank of America",    sector: XLF,  benchmark: SPY}
+  - {symbol: GS,    name: "Goldman Sachs",      sector: XLF,  benchmark: SPY}
+  - {symbol: V,     name: "Visa",               sector: XLF,  benchmark: SPY}
+  - {symbol: MA,    name: "Mastercard",         sector: XLF,  benchmark: SPY}
+  - {symbol: LLY,   name: "Eli Lilly",          sector: XLV,  benchmark: SPY}
+  - {symbol: UNH,   name: "UnitedHealth",       sector: XLV,  benchmark: SPY}
+  - {symbol: JNJ,   name: "Johnson & Johnson",  sector: XLV,  benchmark: SPY}
+  - {symbol: MRK,   name: "Merck",              sector: XLV,  benchmark: SPY}
+  - {symbol: ABBV,  name: "AbbVie",             sector: XLV,  benchmark: SPY}
+  - {symbol: XOM,   name: "Exxon Mobil",        sector: XLE,  benchmark: SPY}
+  - {symbol: CVX,   name: "Chevron",            sector: XLE,  benchmark: SPY}
+  - {symbol: CAT,   name: "Caterpillar",        sector: XLI,  benchmark: SPY}
+  - {symbol: GE,    name: "GE Aerospace",       sector: XLI,  benchmark: SPY}
+  - {symbol: DE,    name: "Deere",              sector: XLI,  benchmark: SPY}
+  - {symbol: FCX,   name: "Freeport-McMoRan",   sector: XLB,  benchmark: SPY}
+  - {symbol: COST,  name: "Costco",             sector: XLP,  benchmark: SPY}
+  - {symbol: WMT,   name: "Walmart",            sector: XLP,  benchmark: SPY}
+  - {symbol: HD,    name: "Home Depot",         sector: XLY,  benchmark: SPY}
+  - {symbol: MCD,   name: "McDonald's",         sector: XLY,  benchmark: SPY}
+  - {symbol: KO,    name: "Coca-Cola",          sector: XLP,  benchmark: SPY}
+  - {symbol: DIS,   name: "Walt Disney",        sector: XLC,  benchmark: SPY}
+  - {symbol: TMUS,  name: "T-Mobile US",        sector: XLC,  benchmark: SPY}
+  # --- Broad universe expansion (2026-06-18): wide cross-section of US large/mid
+  # caps across all 11 sectors so recommendations are selected from a real field,
+  # not a short list. Keyless Yahoo fundamentals; names that fail fall back to the
+  # technical/ETF tier honestly.
+  - {symbol: INTC,  name: "Intel",                sector: XLK,  benchmark: QQQ}
+  - {symbol: QCOM,  name: "Qualcomm",             sector: XLK,  benchmark: QQQ}
+  - {symbol: TXN,   name: "Texas Instruments",    sector: XLK,  benchmark: QQQ}
+  - {symbol: ADI,   name: "Analog Devices",       sector: XLK,  benchmark: QQQ}
+  - {symbol: KLAC,  name: "KLA Corp",             sector: XLK,  benchmark: QQQ}
+  - {symbol: CDNS,  name: "Cadence Design",       sector: XLK,  benchmark: QQQ}
+  - {symbol: SNPS,  name: "Synopsys",             sector: XLK,  benchmark: QQQ}
+  - {symbol: INTU,  name: "Intuit",               sector: XLK,  benchmark: QQQ}
+  - {symbol: IBM,   name: "IBM",                  sector: XLK,  benchmark: SPY}
+  - {symbol: CSCO,  name: "Cisco Systems",        sector: XLK,  benchmark: SPY}
+  - {symbol: ACN,   name: "Accenture",            sector: XLK,  benchmark: SPY}
+  - {symbol: MSI,   name: "Motorola Solutions",   sector: XLK,  benchmark: SPY}
+  - {symbol: FTNT,  name: "Fortinet",             sector: XLK,  benchmark: QQQ}
+  - {symbol: TSM,   name: "TSMC (ADR)",           sector: XLK,  benchmark: QQQ}
+  - {symbol: ASML,  name: "ASML (ADR)",           sector: XLK,  benchmark: QQQ}
+  - {symbol: T,     name: "AT&T",                 sector: XLC,  benchmark: SPY}
+  - {symbol: VZ,    name: "Verizon",              sector: XLC,  benchmark: SPY}
+  - {symbol: CMCSA, name: "Comcast",              sector: XLC,  benchmark: SPY}
+  - {symbol: EA,    name: "Electronic Arts",      sector: XLC,  benchmark: SPY}
+  - {symbol: TTWO,  name: "Take-Two Interactive", sector: XLC,  benchmark: QQQ}
+  - {symbol: SPOT,  name: "Spotify",              sector: XLC,  benchmark: QQQ}
+  - {symbol: NKE,   name: "Nike",                 sector: XLY,  benchmark: SPY}
+  - {symbol: SBUX,  name: "Starbucks",            sector: XLY,  benchmark: SPY}
+  - {symbol: LOW,   name: "Lowe's",               sector: XLY,  benchmark: SPY}
+  - {symbol: TJX,   name: "TJX Companies",        sector: XLY,  benchmark: SPY}
+  - {symbol: BKNG,  name: "Booking Holdings",     sector: XLY,  benchmark: QQQ}
+  - {symbol: MAR,   name: "Marriott",             sector: XLY,  benchmark: SPY}
+  - {symbol: GM,    name: "General Motors",       sector: XLY,  benchmark: SPY}
+  - {symbol: F,     name: "Ford Motor",           sector: XLY,  benchmark: SPY}
+  - {symbol: CMG,   name: "Chipotle",             sector: XLY,  benchmark: SPY}
+  - {symbol: ABNB,  name: "Airbnb",               sector: XLY,  benchmark: QQQ}
+  - {symbol: PEP,   name: "PepsiCo",              sector: XLP,  benchmark: SPY}
+  - {symbol: PG,    name: "Procter & Gamble",     sector: XLP,  benchmark: SPY}
+  - {symbol: MDLZ,  name: "Mondelez",             sector: XLP,  benchmark: SPY}
+  - {symbol: CL,    name: "Colgate-Palmolive",    sector: XLP,  benchmark: SPY}
+  - {symbol: MO,    name: "Altria",               sector: XLP,  benchmark: SPY}
+  - {symbol: PM,    name: "Philip Morris Intl",   sector: XLP,  benchmark: SPY}
+  - {symbol: KMB,   name: "Kimberly-Clark",       sector: XLP,  benchmark: SPY}
+  - {symbol: GIS,   name: "General Mills",        sector: XLP,  benchmark: SPY}
+  - {symbol: KDP,   name: "Keurig Dr Pepper",     sector: XLP,  benchmark: SPY}
+  - {symbol: COP,   name: "ConocoPhillips",       sector: XLE,  benchmark: SPY}
+  - {symbol: SLB,   name: "Schlumberger",         sector: XLE,  benchmark: SPY}
+  - {symbol: EOG,   name: "EOG Resources",        sector: XLE,  benchmark: SPY}
+  - {symbol: MPC,   name: "Marathon Petroleum",   sector: XLE,  benchmark: SPY}
+  - {symbol: PSX,   name: "Phillips 66",          sector: XLE,  benchmark: SPY}
+  - {symbol: OXY,   name: "Occidental Petroleum", sector: XLE,  benchmark: SPY}
+  - {symbol: KMI,   name: "Kinder Morgan",        sector: XLE,  benchmark: SPY}
+  - {symbol: WFC,   name: "Wells Fargo",          sector: XLF,  benchmark: SPY}
+  - {symbol: C,     name: "Citigroup",            sector: XLF,  benchmark: SPY}
+  - {symbol: MS,    name: "Morgan Stanley",       sector: XLF,  benchmark: SPY}
+  - {symbol: BLK,   name: "BlackRock",            sector: XLF,  benchmark: SPY}
+  - {symbol: SCHW,  name: "Charles Schwab",       sector: XLF,  benchmark: SPY}
+  - {symbol: AXP,   name: "American Express",     sector: XLF,  benchmark: SPY}
+  - {symbol: SPGI,  name: "S&P Global",           sector: XLF,  benchmark: SPY}
+  - {symbol: BX,    name: "Blackstone",           sector: XLF,  benchmark: SPY}
+  - {symbol: KKR,   name: "KKR",                  sector: XLF,  benchmark: SPY}
+  - {symbol: ICE,   name: "Intercontinental Exch",sector: XLF,  benchmark: SPY}
+  - {symbol: CME,   name: "CME Group",            sector: XLF,  benchmark: SPY}
+  - {symbol: ABT,   name: "Abbott Laboratories",  sector: XLV,  benchmark: SPY}
+  - {symbol: TMO,   name: "Thermo Fisher",        sector: XLV,  benchmark: SPY}
+  - {symbol: DHR,   name: "Danaher",              sector: XLV,  benchmark: SPY}
+  - {symbol: PFE,   name: "Pfizer",               sector: XLV,  benchmark: SPY}
+  - {symbol: AMGN,  name: "Amgen",                sector: XLV,  benchmark: SPY}
+  - {symbol: BMY,   name: "Bristol-Myers Squibb", sector: XLV,  benchmark: SPY}
+  - {symbol: MDT,   name: "Medtronic",            sector: XLV,  benchmark: SPY}
+  - {symbol: ISRG,  name: "Intuitive Surgical",   sector: XLV,  benchmark: SPY}
+  - {symbol: GILD,  name: "Gilead Sciences",      sector: XLV,  benchmark: SPY}
+  - {symbol: VRTX,  name: "Vertex Pharma",        sector: XLV,  benchmark: SPY}
+  - {symbol: REGN,  name: "Regeneron",            sector: XLV,  benchmark: SPY}
+  - {symbol: CVS,   name: "CVS Health",           sector: XLV,  benchmark: SPY}
+  - {symbol: ELV,   name: "Elevance Health",      sector: XLV,  benchmark: SPY}
+  - {symbol: SYK,   name: "Stryker",              sector: XLV,  benchmark: SPY}
+  - {symbol: HON,   name: "Honeywell",            sector: XLI,  benchmark: SPY}
+  - {symbol: UNP,   name: "Union Pacific",        sector: XLI,  benchmark: SPY}
+  - {symbol: BA,    name: "Boeing",               sector: XLI,  benchmark: SPY}
+  - {symbol: RTX,   name: "RTX Corp",             sector: XLI,  benchmark: SPY}
+  - {symbol: LMT,   name: "Lockheed Martin",      sector: XLI,  benchmark: SPY}
+  - {symbol: GD,    name: "General Dynamics",     sector: XLI,  benchmark: SPY}
+  - {symbol: NOC,   name: "Northrop Grumman",     sector: XLI,  benchmark: SPY}
+  - {symbol: UPS,   name: "United Parcel Service", sector: XLI, benchmark: SPY}
+  - {symbol: ETN,   name: "Eaton",                sector: XLI,  benchmark: SPY}
+  - {symbol: ITW,   name: "Illinois Tool Works",  sector: XLI,  benchmark: SPY}
+  - {symbol: CSX,   name: "CSX Corp",             sector: XLI,  benchmark: SPY}
+  - {symbol: FDX,   name: "FedEx",                sector: XLI,  benchmark: SPY}
+  - {symbol: GEV,   name: "GE Vernova",           sector: XLI,  benchmark: SPY}
+  - {symbol: LIN,   name: "Linde",                sector: XLB,  benchmark: SPY}
+  - {symbol: APD,   name: "Air Products",         sector: XLB,  benchmark: SPY}
+  - {symbol: SHW,   name: "Sherwin-Williams",     sector: XLB,  benchmark: SPY}
+  - {symbol: ECL,   name: "Ecolab",               sector: XLB,  benchmark: SPY}
+  - {symbol: NEM,   name: "Newmont",              sector: XLB,  benchmark: SPY}
+  - {symbol: NUE,   name: "Nucor",                sector: XLB,  benchmark: SPY}
+  - {symbol: NEE,   name: "NextEra Energy",       sector: XLU,  benchmark: SPY}
+  - {symbol: DUK,   name: "Duke Energy",          sector: XLU,  benchmark: SPY}
+  - {symbol: SO,    name: "Southern Co",          sector: XLU,  benchmark: SPY}
+  - {symbol: D,     name: "Dominion Energy",      sector: XLU,  benchmark: SPY}
+  - {symbol: AEP,   name: "American Electric Pwr", sector: XLU, benchmark: SPY}
+  - {symbol: SRE,   name: "Sempra",               sector: XLU,  benchmark: SPY}
+  - {symbol: CEG,   name: "Constellation Energy", sector: XLU,  benchmark: SPY}
+  - {symbol: PLD,   name: "Prologis",             sector: XLRE, benchmark: SPY}
+  - {symbol: AMT,   name: "American Tower",       sector: XLRE, benchmark: SPY}
+  - {symbol: EQIX,  name: "Equinix",              sector: XLRE, benchmark: SPY}
+  - {symbol: O,     name: "Realty Income",        sector: XLRE, benchmark: SPY}
+  - {symbol: CCI,   name: "Crown Castle",         sector: XLRE, benchmark: SPY}
+  - {symbol: WELL,  name: "Welltower",            sector: XLRE, benchmark: SPY}
+  # --- Emerging / breakout & turnaround candidates (2026-06-19): the field a
+  # "next NVDA (2017) / SanDisk (2025)" big-bet could be drawn from — high-beta
+  # growth, memory-cycle, AI-infra, quantum, advanced-nuclear, space and
+  # turnaround names. They broaden the moonshot/HOT candidate pool beyond the
+  # established mega-caps. Keyless Yahoo fundamentals; names that fail fall back
+  # to the technical tier honestly, and the curated `spotlight:` overlay (below)
+  # keeps the genuinely-in-focus ones from being buried by thin keyless data.
+  - {symbol: SNDK,  name: "SanDisk",              sector: XLK,  benchmark: QQQ}  # price_untrusted (see below)
+  - {symbol: WDC,   name: "Western Digital",      sector: XLK,  benchmark: QQQ}  # price_untrusted (see below)
+  - {symbol: COHR,  name: "Coherent",             sector: XLK,  benchmark: QQQ}
+  - {symbol: CRDO,  name: "Credo Technology",     sector: XLK,  benchmark: QQQ}
+  - {symbol: NBIS,  name: "Nebius Group",         sector: XLK,  benchmark: QQQ}
+  - {symbol: "ON",  name: "ON Semiconductor",     sector: XLK,  benchmark: QQQ}  # quoted: bare ON is YAML bool true
+  - {symbol: APP,   name: "AppLovin",             sector: XLK,  benchmark: QQQ}
+  - {symbol: IONQ,  name: "IonQ",                 sector: XLK,  benchmark: QQQ}
+  - {symbol: RGTI,  name: "Rigetti Computing",    sector: XLK,  benchmark: QQQ}
+  - {symbol: DELL,  name: "Dell Technologies",    sector: XLK,  benchmark: SPY}
+  - {symbol: RDDT,  name: "Reddit",               sector: XLC,  benchmark: QQQ}
+  - {symbol: ASTS,  name: "AST SpaceMobile",      sector: XLC,  benchmark: SPY}
+  - {symbol: RKLB,  name: "Rocket Lab",           sector: XLI,  benchmark: SPY}
+  - {symbol: SMR,   name: "NuScale Power",        sector: XLI,  benchmark: SPY}
+  - {symbol: OKLO,  name: "Oklo",                 sector: XLU,  benchmark: SPY}
+  - {symbol: VST,   name: "Vistra",              sector: XLU,  benchmark: SPY}
+  - {symbol: TEM,   name: "Tempus AI",            sector: XLV,  benchmark: SPY}
+  - {symbol: HOOD,  name: "Robinhood Markets",    sector: XLF,  benchmark: SPY}
+  - {symbol: COIN,  name: "Coinbase Global",      sector: XLF,  benchmark: SPY}
+
+# Covered-call / option-income ETFs (spec §27). Analyzed with a structural
+# overlay (capped upside, NAV erosion, distribution != total return), never
+# recommended on distribution yield alone. `underlying` = the benchmark to
+# compare total return against.
+covered_call_etfs:
+  - {symbol: JEPI, name: "JPMorgan Equity Premium Income",   underlying: SPY}
+  - {symbol: JEPQ, name: "JPMorgan Nasdaq Equity Premium Inc", underlying: QQQ}
+  - {symbol: QYLD, name: "Global X Nasdaq-100 Covered Call",  underlying: QQQ}
+  - {symbol: RYLD, name: "Global X Russell 2000 Covered Call",underlying: IWM}
+  - {symbol: XYLD, name: "Global X S&P 500 Covered Call",     underlying: SPY}
+  - {symbol: DIVO, name: "Amplify CWP Enhanced Dividend Income", underlying: SPY}
+
+# Benchmark map used by the accuracy/backtest engine to pick a context-appropriate
+# benchmark for a recommendation.
+benchmarks:
+  default: SPY
+  nasdaq: QQQ
+  small: IWM
+  mid: MDY
+
+# Price denylist — tickers whose keyless Yahoo feed returns SYSTEMATICALLY corrupt
+# prices (the whole record is uniformly inflated ~10-12x: chart price, analyst
+# target_low/mean/high, AND market_cap all agree at the wrong scale, so no internal
+# cross-check can catch it — e.g. "Micron @ $1,134, $1.28T market cap"; SanDisk &
+# Western Digital are mis-adjusted by the 2025 WD/SanDisk spin-off). These names are
+# STILL recommended (scores/thesis are price-relative and fine), but their absolute
+# TARGET BAND is suppressed and flagged `data_freshness="suspect"` — never shown as a
+# real prediction. Remove a ticker here once the keyless source is trustworthy again.
+price_untrusted:
+  - MU
+  - SNDK
+  - WDC
+
+# Curated "spotlight" overlay — an EDITORIAL HOUSE WATCHLIST, NOT market data.
+# Honesty note (CLAUDE.md invariant 2): these are NOT fabricated live signals.
+# They are a labelled house input (the same category as a regime/policy override)
+# that captures the desk's *current focus* — names drawing fresh attention
+# (`heat`, 0–100) and/or carrying a high-conviction asymmetric-upside thesis
+# (`conviction`, 0–100) — so the keyless-only scorers don't bury a genuinely
+# in-focus turnaround (e.g. Intel) or a still-cheap "next big thing" (e.g.
+# SanDisk) under names that merely have richer keyless fundamentals. `heat`
+# floors the HOT (🔥) ranking; `conviction` floors the Big-Bet (🐋 대어) ranking.
+# Each entry MUST also exist in `stocks:` above, and shows its `note` in the UI so
+# the reader sees *why* it is highlighted. Review/refresh this list periodically.
+spotlight:
+  - {symbol: INTC, heat: 88, conviction: 56, theme_ko: "파운드리 턴어라운드", theme_en: "Foundry turnaround",
+     note_ko: "파운드리 분사·정부 지원·AI PC 기대가 겹치며 시장의 관심이 다시 집중되는 대표 턴어라운드 후보.",
+     note_en: "A marquee turnaround back in focus — foundry spin-off, government support, and AI-PC hopes draw fresh attention."}
+  - {symbol: NVDA, heat: 84, conviction: 44, theme_ko: "AI 가속기 대장주", theme_en: "AI accelerator bellwether",
+     note_ko: "AI 가속기 시장의 절대 대장주로 모든 자금과 뉴스가 모이지만, 이미 고평가라 '저평가 대어'와는 거리가 있음.",
+     note_en: "The undisputed AI-accelerator bellwether — all the flows and headlines, but richly valued, so it leads HOT, not the cheap big-bets."}
+  - {symbol: PLTR, heat: 78, conviction: 50, theme_ko: "AI 소프트웨어", theme_en: "AI software platform",
+     note_ko: "기업·정부 AI 도입의 대표 수혜주로 개인투자자 관심이 매우 높음.",
+     note_en: "The retail-favourite proxy for enterprise & government AI adoption — very high attention."}
+  - {symbol: AMD,  heat: 74, conviction: 60, theme_ko: "AI 가속기 2위 추격", theme_en: "AI accelerator #2",
+     note_ko: "엔비디아의 유일한 현실적 대안으로, MI 가속기 점유율 확대 시 재평가 여지가 큼.",
+     note_en: "The only credible #2 in AI accelerators — meaningful re-rating room if MI-series share keeps climbing."}
+  - {symbol: SNDK, heat: 72, conviction: 82, theme_ko: "메모리 슈퍼사이클", theme_en: "Memory super-cycle",
+     note_ko: "2025년 웨스턴디지털에서 분사한 낸드 순수주. 메모리 업사이클 초입의 전형적 '저평가 대어'. (목표 밴드는 데이터 점검 중)",
+     note_en: "The 2025 NAND pure-play spun out of Western Digital — a textbook value-disguised big bet at the front of a memory upcycle. (Target band withheld pending data review.)"}
+  - {symbol: MU,   heat: 70, conviction: 70, theme_ko: "HBM 메모리", theme_en: "HBM memory",
+     note_ko: "AI 서버용 고대역폭메모리(HBM) 핵심 공급사로 업황 반등 시 이익 레버리지가 큼.",
+     note_en: "A key high-bandwidth-memory (HBM) supplier for AI servers, with large earnings leverage as the cycle turns."}
+  - {symbol: AVGO, heat: 68, conviction: 50, theme_ko: "맞춤형 AI 실리콘", theme_en: "Custom AI silicon",
+     note_ko: "하이퍼스케일러 맞춤형 AI 칩과 네트워킹의 숨은 수혜주로 꾸준히 관심 상승.",
+     note_en: "The quieter winner in custom hyperscaler AI silicon and networking — steadily rising attention."}
+  - {symbol: TSM,  heat: 66, conviction: 52, theme_ko: "파운드리 절대강자", theme_en: "Foundry leader",
+     note_ko: "AI 칩 생산의 병목을 쥔 파운드리 절대강자로 사실상 AI 사이클의 관문.",
+     note_en: "The foundry leader that holds the AI-chip production bottleneck — effectively the gateway to the whole cycle."}
+  - {symbol: CRDO, heat: 58, conviction: 78, theme_ko: "AI 데이터센터 연결", theme_en: "AI datacenter interconnect",
+     note_ko: "AI 데이터센터 고속 연결(액티브 전기 케이블) 급성장 수혜주로 매출 성장률이 폭발적.",
+     note_en: "A high-growth beneficiary of AI-datacenter interconnect (active electrical cables), with explosive revenue growth."}
+  - {symbol: IONQ, heat: 64, conviction: 80, theme_ko: "양자컴퓨팅", theme_en: "Quantum computing",
+     note_ko: "상용 양자컴퓨팅 선두주자 — 초고위험이지만 성공 시 판이 바뀌는 비대칭 베팅.",
+     note_en: "A commercial quantum-computing frontrunner — very high risk, but a paradigm-shifting asymmetric bet if it works."}
+  - {symbol: OKLO, heat: 62, conviction: 80, theme_ko: "차세대 원전(SMR)", theme_en: "Advanced nuclear (SMR)",
+     note_ko: "AI 데이터센터 전력난의 해법으로 부상한 소형모듈원전(SMR) 대표주 — 상용화 전 고위험·고수익.",
+     note_en: "A leading small-modular-reactor (SMR) name riding the AI-datacenter power crunch — pre-commercial, high-risk/high-reward."}
+  - {symbol: RKLB, heat: 60, conviction: 74, theme_ko: "우주 발사·위성", theme_en: "Space launch & satellites",
+     note_ko: "스페이스X 다음으로 주목받는 소형 발사체·위성 업체로 발사 빈도 확대가 성장 동력.",
+     note_en: "The most-watched space name after SpaceX in small launch & satellites, with rising launch cadence driving growth."}

@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Fonts: system stack via tailwind fontFamily (no external CDN dependency —
+   avoids a blocking third-party request and keeps the app self-contained). */
+
+:root {
+  /* Modern dark fintech palette (HSL channels for <alpha-value>). */
+  --background: 222 30% 6%;
+  --surface: 222 24% 9%;
+  --elevated: 221 20% 13%;
+  --border: 220 16% 20%;
+  --muted: 217 14% 60%;
+  --foreground: 213 31% 95%;
+  --accent: 199 89% 55%;     /* sky blue — brand/CTA */
+  --accent-2: 262 70% 64%;   /* violet — secondary emphasis */
+  --danger: 0 72% 58%;
+  --warning: 38 92% 56%;
+  /* US convention: up = green, down = red. */
+  --up: 152 60% 48%;
+  --down: 0 72% 60%;
+}
+
+* { border-color: hsl(var(--border)); }
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-border bg-surface/80 p-5 shadow-[0_1px_0_0_hsl(var(--elevated))] backdrop-blur-sm;
+  }
+  .card-hover {
+    @apply transition-all duration-200 hover:-translate-y-0.5 hover:border-accent/40 hover:bg-elevated/70;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border border-border bg-elevated/70 px-2.5 py-1 text-xs;
+  }
+  .num { @apply font-mono tabular-nums; }
+  .section-label { @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-muted; }
+  .btn {
+    @apply inline-flex items-center gap-2 rounded-lg border border-border bg-elevated px-3 py-1.5 text-sm font-medium
+           transition-colors hover:border-accent/50 hover:bg-elevated/80 disabled:opacity-50;
+  }
+  .kbd {
+    @apply rounded border border-border bg-elevated px-1.5 py-0.5 font-mono text-[11px] text-muted;
+  }
+}
+
+/* Respect reduced-motion (accessibility, spec §33.2). */
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+/* Print / Save-as-PDF: clean report only (hide chrome), light paper. */
+@media print {
+  header, footer, .no-print { display: none !important; }
+  body { background: #fff !important; color: #111 !important; }
+  main { max-width: none !important; padding: 0 !important; }
+  .report-doc {
+    max-width: none !important; border: none !important; box-shadow: none !important;
+    background: #fff !important; color: #111 !important; backdrop-filter: none !important;
+  }
+  .report-doc h1, .report-doc h2, .report-doc strong, .report-doc blockquote { color: #111 !important; }
+  .report-doc h2 { color: #1a4f8a !important; border-color: #ccc !important; }
+  .report-doc p, .report-doc li, .report-doc em { color: #333 !important; }
+  .report-doc hr { border-color: #ccc !important; }
+  @page { margin: 18mm; }
+}
