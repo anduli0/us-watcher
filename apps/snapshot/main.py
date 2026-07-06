@@ -34,7 +34,12 @@ from typing import Any
 import httpx
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / "apps" / "web" / "public" / "data"
+# Output dir: the web app's static data folder by default; override with
+# SNAPSHOT_OUT (e.g. to a temp dir when testing without touching the committed
+# snapshot).
+OUT = Path(os.environ["SNAPSHOT_OUT"]) if os.environ.get("SNAPSHOT_OUT") else (
+    ROOT / "apps" / "web" / "public" / "data"
+)
 
 # Endpoints the web UI calls (see grep of apps/web for api.*). Query params must
 # match what the client sends so the baked filename matches the client's lookup.
@@ -160,6 +165,19 @@ async def main() -> None:
             _write(encode_file(path, params), resp.json())
             ok += 1
 
+        # Data-health signal so a cloud refresh can refuse to publish a snapshot
+        # built on MOCK prices (invariant 2): count non-live cards in the overview.
+        mock_cards = total_cards = 0
+        try:
+            ov = await client.get("/api/v1/market/overview")
+            cards = ov.json().get("cards", []) if ov.status_code == 200 else []
+            total_cards = len(cards)
+            mock_cards = sum(1 for c in cards if str(c.get("status")) == "MOCK")
+        except Exception:
+            pass
+        mock_fraction = (mock_cards / total_cards) if total_cards else 1.0
+        live_data = total_cards > 0 and mock_fraction < 0.5
+
         # A static "refresh status" so the nav can show the last update time.
         _write("api/v1/refresh/status.json", {
             "running": False, "started_at": None, "finished_at": now_utc().isoformat(),
@@ -167,7 +185,8 @@ async def main() -> None:
             "cooldown_remaining_seconds": 0, "llm": "static", "static": True,
         })
         _write("meta.json", {"generated_at": now_utc().isoformat(), "mode": mode,
-                             "files": ok, "failed": failed})
+                             "files": ok, "failed": failed, "live_data": live_data,
+                             "mock_cards": mock_cards, "total_cards": total_cards})
     finally:
         await client.aclose()
 

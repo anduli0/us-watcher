@@ -1,0 +1,62 @@
+name: Refresh snapshot (cloud)
+
+# Regenerates the data snapshot entirely in the cloud — no PC required — by
+# running the deterministic pipelines against keyless live data (Yahoo / FRED /
+# Google News) plus subscription-Claude prose. If the run produces real (non-
+# MOCK) data it commits apps/web/public/data, which triggers deploy.yml.
+#
+# This is what makes the site's DATA (not just its availability) independent of
+# any computer being on. If a datacenter IP is rate-limited by Yahoo the run
+# yields MOCK prices and the commit is SKIPPED — the last good local snapshot is
+# preserved (data-integrity invariant 2), never overwritten with fiction.
+
+on:
+  schedule:
+    # US market cadence in KST: after prior close, pre-open, midday, post-close.
+    - cron: "20 21 * * *" # 06:20 KST
+    - cron: "20 3 * * *" # 12:20 KST
+    - cron: "20 13 * * *" # 22:20 KST
+  workflow_dispatch:
+
+permissions:
+  contents: write # commit the refreshed snapshot back to main
+
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install package
+        run: pip install -e .
+      - name: Install Claude CLI (subscription prose; optional)
+        run: npm install -g @anthropic-ai/claude-code
+      - name: Generate snapshot (keyless live data + prose)
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          MARKET_DATA_PROVIDER: yahoo
+          NEWS_PROVIDER: google
+        run: python -m apps.snapshot.main
+      - name: Publish only if the data is real (never overwrite with MOCK)
+        run: |
+          live=$(python -c "import json;print(json.load(open('apps/web/public/data/meta.json')).get('live_data'))")
+          echo "live_data=$live"
+          if [ "$live" != "True" ]; then
+            echo "::warning::Snapshot data is MOCK-heavy (datacenter IP likely rate-limited) — skipping publish to preserve the last good snapshot."
+            exit 0
+          fi
+          git config user.name "us-watcher-bot"
+          git config user.email "actions@github.com"
+          git add apps/web/public/data
+          if git diff --cached --quiet; then
+            echo "No snapshot changes."
+            exit 0
+          fi
+          git commit -m "snapshot: cloud refresh $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push
