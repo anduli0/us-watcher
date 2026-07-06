@@ -87,6 +87,24 @@ def _write(rel_file: str, data: Any) -> None:
     dest.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
 
+def _merge_archive(lang: str, fresh: list[dict]) -> list[dict]:
+    """Union the freshly-generated brief archive with the one already baked in
+    the repo, so a fresh-DB cloud run never drops historical briefs from the
+    list. Keyed by (date, type); fresh entries win on conflict; newest first."""
+    existing_file = OUT / encode_file("/api/v1/briefings/archive", {"language": lang})
+    prior: list[dict] = []
+    if existing_file.exists():
+        try:
+            prior = json.loads(existing_file.read_text(encoding="utf-8")).get("archive", [])
+        except (json.JSONDecodeError, OSError):
+            prior = []
+    by_key: dict[tuple[str, str], dict] = {}
+    for item in [*prior, *fresh]:  # fresh last -> overrides prior
+        key = (str(item.get("briefing_date")), str(item.get("briefing_type")))
+        by_key[key] = item
+    return sorted(by_key.values(), key=lambda i: str(i.get("briefing_date")), reverse=True)
+
+
 async def _run_pipelines() -> None:
     """CI path: populate a fresh DB from keyless live data + subscription prose."""
     from us_watcher.agent_service.orchestrator import run_orchestrator
@@ -145,24 +163,38 @@ async def main() -> None:
     failed: list[str] = []
     try:
         # discover archived briefings (date × type) to bake per-date views.
+        # A cloud (CI) run has a fresh, empty DB — so its archive only holds
+        # today's briefs. To avoid the site's "past briefs" list shrinking on
+        # every cloud refresh, MERGE the fresh archive with the one already baked
+        # in the repo (their byDate files persist on disk from prior runs).
         gets = list(STATIC_GETS)
         for lang in ("en", "ko"):
             r = await client.get("/api/v1/briefings/archive", params={"language": lang})
-            if r.status_code == 200:
-                for item in r.json().get("archive", []):
-                    gets.append(("/api/v1/briefings/" + str(item["briefing_date"]),
-                                 {"language": lang, "briefing_type": str(item["briefing_type"])}))
+            fresh = r.json().get("archive", []) if r.status_code == 200 else []
+            merged = _merge_archive(lang, fresh)
+            _write(encode_file("/api/v1/briefings/archive", {"language": lang}), {"archive": merged})
+            for item in merged:
+                gets.append(("/api/v1/briefings/" + str(item["briefing_date"]),
+                             {"language": lang, "briefing_type": str(item["briefing_type"])}))
+        # archive endpoints are now pre-written (merged) — don't re-dump them.
+        gets = [g for g in gets if g[0] != "/api/v1/briefings/archive"]
 
         for path, params in gets:
+            rel = encode_file(path, params)
             try:
                 resp = await client.get(path, params=params)
             except Exception as exc:  # network/ASGI error
                 failed.append(f"{path} {params}: {exc!r}"[:200])
                 continue
             if resp.status_code != 200:
+                # A historical brief absent from a fresh CI DB (404) but already
+                # baked on disk from a prior run is fine — keep the existing file.
+                if resp.status_code == 404 and (OUT / rel).exists():
+                    ok += 1
+                    continue
                 failed.append(f"{path} {params}: HTTP {resp.status_code}")
                 continue
-            _write(encode_file(path, params), resp.json())
+            _write(rel, resp.json())
             ok += 1
 
         # Data-health signal so a cloud refresh can refuse to publish a snapshot
@@ -173,8 +205,8 @@ async def main() -> None:
             cards = ov.json().get("cards", []) if ov.status_code == 200 else []
             total_cards = len(cards)
             mock_cards = sum(1 for c in cards if str(c.get("status")) == "MOCK")
-        except Exception:
-            pass
+        except Exception as exc:  # data-health probe is best-effort
+            print(f"[snapshot] data-health probe failed: {exc!r}"[:200])
         mock_fraction = (mock_cards / total_cards) if total_cards else 1.0
         live_data = total_cards > 0 and mock_fraction < 0.5
 
