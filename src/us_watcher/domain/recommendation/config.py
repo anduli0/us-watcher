@@ -42,6 +42,18 @@ HORIZON_WEIGHTS: dict[Horizon, dict[str, float]] = {
     },
 }
 
+# Sub-industries whose CYCLE state predicts forward EXCESS return — the ONLY groups
+# the sub-industry cycle blend is applied to. MEASURED by accuracy/cycle_calibration.py
+# over 5y keyless history (2026-07-14; 22 semis vs SPY, point-in-time, no look-ahead).
+# H120 cycle-ON minus cycle-OFF mean excess return:
+#   memory +96, semi_equip +7.4, semi_analog +4.1  -> cyclical (cycle-OFF underperforms)
+#   semi_logic -15.6, semi_eda -4.9                 -> secular / mean-reverting: EXCLUDED
+#     (a cycle discount there HURT forward return — a uniform blend is NOT supported).
+#   semi_foundry: n<2 peers, no read -> excluded.
+# The signs agree with economic priors (commodity/capex-cyclical vs secular growth), so
+# this is not a single-sample artefact. Re-run the calibration to refresh membership.
+CYCLICAL_SUB_INDUSTRIES: frozenset[str] = frozenset({"memory", "semi_equip", "semi_analog"})
+
 # Capital Migration Score components (must sum to 100), spec §25.
 CMS_WEIGHTS: dict[str, float] = {
     "capex_growth": 15,
@@ -69,6 +81,21 @@ ACTION_THRESHOLDS = {
 
 # Risk penalty: risk score (0-100, higher=riskier) scaled into points subtracted.
 RISK_PENALTY_MAX = 22.0
+
+# Attention nudge (spec §23): the editorial spotlight `heat` — a labelled house read
+# of real-world attention the keyless signals miss (e.g. a name suddenly all over the
+# tape) — may LIFT the action score by up to this many points. It is the one
+# attention axis NOT already inside a weighted component (momentum, CMS, analyst
+# breadth and news direction are all scored elsewhere), so wiring it here does not
+# double-count. Deliberately small: enough to nudge a genuinely in-focus name across
+# a threshold, never enough to manufacture a BUY on buzz alone. Applied at SHORT (full)
+# and MEDIUM (half); long-horizon calls ignore it.
+ATTENTION_BONUS_MAX = 6.0
+ATTENTION_HORIZON_FACTOR: dict[Horizon, float] = {
+    Horizon.SHORT: 1.0,
+    Horizon.MEDIUM: 0.5,
+    Horizon.MEDIUM_LONG: 0.0,
+}
 # Confidence floor below which a would-be BUY is demoted to WATCH (spec §23).
 WATCH_CONFIDENCE_FLOOR = 45.0
 

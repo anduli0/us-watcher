@@ -82,6 +82,28 @@ def sector_leadership_score(rel_strength_1m: float | None) -> float | None:
     return round(_clamp01(50.0 + rel_strength_1m * 500.0), 1)  # +10% RS -> 100
 
 
+def blend_sub_industry_cycle(
+    own_rs: float | None, group_cycle_rs: float | None, *, group_weight: float = 0.4
+) -> float | None:
+    """Temper a stock's own relative strength with its sub-industry's CYCLE.
+
+    ``group_cycle_rs`` is the mean multi-month relative strength of the name's
+    sub-industry peers vs the market — a keyless, deterministic read of where that
+    sub-industry's price cycle sits *right now* (memory rolling over vs logic
+    accelerating). Blending it into the name's own 1-month relative strength makes
+    the sector-leadership signal reflect the industry cycle, not just the single
+    stock's short trend: a memory name whose own price has not yet broken is still
+    dragged by a rolling-over memory group, and a logic name lagging a strong group
+    is lifted. Returns ``own_rs`` unchanged for unclassified names (no group read),
+    so this only touches instruments we explicitly classify."""
+    if group_cycle_rs is None:
+        return own_rs
+    if own_rs is None:
+        return group_cycle_rs
+    w = max(0.0, min(1.0, group_weight))
+    return (1.0 - w) * own_rs + w * group_cycle_rs
+
+
 def risk_score(
     feat: FeatureSet, fund: FundamentalSnapshot | None = None,
     *, is_leveraged: bool = False, is_inverse: bool = False,

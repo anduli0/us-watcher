@@ -6,11 +6,16 @@ import pytest
 
 from us_watcher.domain.enums import Horizon, MarketRegime, RecAction
 from us_watcher.domain.recommendation.config import (
+    ATTENTION_BONUS_MAX,
     CMS_WEIGHTS,
     ETF_APPLICABLE_KEYS,
     HORIZON_WEIGHTS,
     STOCK_APPLICABLE_KEYS,
     WATCH_CONFIDENCE_FLOOR,
+)
+from us_watcher.domain.recommendation.features import (
+    blend_sub_industry_cycle,
+    sector_leadership_score,
 )
 from us_watcher.domain.recommendation.scoring import (
     ComponentScores,
@@ -196,3 +201,79 @@ def test_missing_fundamentals_lowers_stock_confidence():
     c_full = score_recommendation(ComponentScores(**full), horizon=Horizon.MEDIUM,
                                   applicable_keys=STOCK_APPLICABLE_KEYS).confidence
     assert c_full > c_partial
+
+
+# --- Sub-industry cycle blend (memory downcycle vs logic strength) ------------
+
+def test_sub_industry_cycle_drags_a_name_whose_group_is_rolling_over():
+    # A memory name whose OWN 1-month RS is flat (+0%) is pulled down once its
+    # sub-industry group's cycle RS is deeply negative (the downcycle), and the
+    # resulting sector-leadership score is lower than the un-blended one.
+    own = 0.0
+    dragged = blend_sub_industry_cycle(own, -0.15)  # group −15% vs market
+    assert dragged is not None and dragged < own
+    assert sector_leadership_score(dragged) < sector_leadership_score(own)
+
+
+def test_sub_industry_cycle_lifts_a_lagging_member_of_a_strong_group():
+    # A logic name lagging (−3%) is lifted when its group cycle is strongly positive.
+    own = -0.03
+    lifted = blend_sub_industry_cycle(own, 0.12, group_weight=0.4)
+    assert lifted is not None and lifted > own
+
+
+def test_sub_industry_cycle_untouched_without_group_read():
+    # Unclassified names (no group cycle) are returned exactly as-is.
+    assert blend_sub_industry_cycle(0.05, None) == 0.05
+    assert blend_sub_industry_cycle(None, None) is None
+
+
+def test_sub_industry_cycle_blend_is_a_weighted_average():
+    # Explicit weighting contract: 0.6*own + 0.4*group at the default weight.
+    assert blend_sub_industry_cycle(0.10, -0.10, group_weight=0.4) == pytest.approx(0.02)
+
+
+_ATTN_CS = dict(technical=60, flow_positioning=55, sector_leadership=58, macro_fit=55,
+                earnings_revision=57, fundamental_quality=55, valuation=55, news_catalyst=55,
+                capital_migration=55, emerging_theme=55, risk=20, data_quality=80)
+
+
+def test_attention_lifts_short_score_but_is_capped():
+    cs = ComponentScores(**_ATTN_CS)
+    base = score_recommendation(cs, horizon=Horizon.SHORT).total_score
+    hot = score_recommendation(cs, horizon=Horizon.SHORT, attention=100)
+    assert hot.total_score > base
+    assert hot.total_score - base <= ATTENTION_BONUS_MAX + 0.05  # never more than the cap
+    assert hot.contributions.get("attention") == pytest.approx(ATTENTION_BONUS_MAX)
+
+
+def test_attention_is_half_at_medium_and_ignored_long():
+    cs = ComponentScores(**_ATTN_CS)
+    d_med = (score_recommendation(cs, horizon=Horizon.MEDIUM, attention=100).total_score
+             - score_recommendation(cs, horizon=Horizon.MEDIUM).total_score)
+    d_long = (score_recommendation(cs, horizon=Horizon.MEDIUM_LONG, attention=100).total_score
+              - score_recommendation(cs, horizon=Horizon.MEDIUM_LONG).total_score)
+    assert d_med == pytest.approx(ATTENTION_BONUS_MAX / 2, abs=0.06)
+    assert d_long == pytest.approx(0.0, abs=0.01)
+
+
+def test_attention_alone_cannot_manufacture_a_buy():
+    # A firmly-HOLD score plus maxed attention must NOT clear the BUY bar — buzz
+    # nudges across a threshold at most, it does not conjure a committed buy.
+    cs = ComponentScores(technical=48, flow_positioning=47, sector_leadership=48, macro_fit=48,
+                         earnings_revision=47, fundamental_quality=48, news_catalyst=47,
+                         risk=20, data_quality=80)
+    hot = score_recommendation(cs, horizon=Horizon.SHORT, attention=100)
+    assert hot.action not in _BUY_FAMILY
+
+
+def test_universe_separates_memory_from_logic_semis():
+    # The classification the whole cycle signal rests on: Micron/SanDisk are memory,
+    # Intel/NVIDIA are logic — never lumped into one undifferentiated "semiconductor".
+    from us_watcher.domain.universe import get_universe
+
+    groups = get_universe().sub_industry_members()
+    assert {"MU", "SNDK"} <= set(groups.get("memory", []))
+    assert {"INTC", "NVDA"} <= set(groups.get("semi_logic", []))
+    assert "MU" not in groups.get("semi_logic", [])
+    assert "INTC" not in groups.get("memory", [])

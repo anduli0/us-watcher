@@ -66,21 +66,21 @@ styles:
 stocks:
   - {symbol: AAPL,  name: "Apple",              sector: XLK,  benchmark: QQQ}
   - {symbol: MSFT,  name: "Microsoft",          sector: XLK,  benchmark: QQQ}
-  - {symbol: NVDA,  name: "NVIDIA",             sector: XLK,  benchmark: QQQ}
+  - {symbol: NVDA,  name: "NVIDIA",             sector: XLK,  benchmark: QQQ, sub_industry: semi_logic}
   - {symbol: GOOGL, name: "Alphabet",           sector: XLC,  benchmark: QQQ}
   - {symbol: AMZN,  name: "Amazon",             sector: XLY,  benchmark: QQQ}
   - {symbol: META,  name: "Meta Platforms",     sector: XLC,  benchmark: QQQ}
-  - {symbol: AVGO,  name: "Broadcom",           sector: XLK,  benchmark: QQQ}
+  - {symbol: AVGO,  name: "Broadcom",           sector: XLK,  benchmark: QQQ, sub_industry: semi_logic}
   - {symbol: TSLA,  name: "Tesla",              sector: XLY,  benchmark: QQQ}
   - {symbol: ORCL,  name: "Oracle",             sector: XLK,  benchmark: QQQ}
   - {symbol: NFLX,  name: "Netflix",            sector: XLC,  benchmark: QQQ}
-  - {symbol: AMD,   name: "Advanced Micro Devices", sector: XLK, benchmark: QQQ}
-  - {symbol: MU,    name: "Micron Technology",  sector: XLK,  benchmark: QQQ}
-  - {symbol: LRCX,  name: "Lam Research",       sector: XLK,  benchmark: QQQ}
-  - {symbol: AMAT,  name: "Applied Materials",  sector: XLK,  benchmark: QQQ}
-  - {symbol: ARM,   name: "Arm Holdings",       sector: XLK,  benchmark: QQQ}
-  - {symbol: ALAB,  name: "Astera Labs",        sector: XLK,  benchmark: QQQ}
-  - {symbol: MRVL,  name: "Marvell Technology", sector: XLK,  benchmark: QQQ}
+  - {symbol: AMD,   name: "Advanced Micro Devices", sector: XLK, benchmark: QQQ, sub_industry: semi_logic}
+  - {symbol: MU,    name: "Micron Technology",  sector: XLK,  benchmark: QQQ, sub_industry: memory}
+  - {symbol: LRCX,  name: "Lam Research",       sector: XLK,  benchmark: QQQ, sub_industry: semi_equip}
+  - {symbol: AMAT,  name: "Applied Materials",  sector: XLK,  benchmark: QQQ, sub_industry: semi_equip}
+  - {symbol: ARM,   name: "Arm Holdings",       sector: XLK,  benchmark: QQQ, sub_industry: semi_logic}
+  - {symbol: ALAB,  name: "Astera Labs",        sector: XLK,  benchmark: QQQ, sub_industry: semi_logic}
+  - {symbol: MRVL,  name: "Marvell Technology", sector: XLK,  benchmark: QQQ, sub_industry: semi_logic}
   - {symbol: SMCI,  name: "Super Micro Computer", sector: XLK, benchmark: QQQ}
   - {symbol: VRT,   name: "Vertiv Holdings",    sector: XLI,  benchmark: QQQ}
   - {symbol: ANET,  name: "Arista Networks",    sector: XLK,  benchmark: QQQ}
@@ -119,21 +119,21 @@ stocks:
   # caps across all 11 sectors so recommendations are selected from a real field,
   # not a short list. Keyless Yahoo fundamentals; names that fail fall back to the
   # technical/ETF tier honestly.
-  - {symbol: INTC,  name: "Intel",                sector: XLK,  benchmark: QQQ}
-  - {symbol: QCOM,  name: "Qualcomm",             sector: XLK,  benchmark: QQQ}
-  - {symbol: TXN,   name: "Texas Instruments",    sector: XLK,  benchmark: QQQ}
-  - {symbol: ADI,   name: "Analog Devices",       sector: XLK,  benchmark: QQQ}
-  - {symbol: KLAC,  name: "KLA Corp",             sector: XLK,  benchmark: QQQ}
-  - {symbol: CDNS,  name: "Cadence Design",       sector: XLK,  benchmark: QQQ}
-  - {symbol: SNPS,  name: "Synopsys",             sector: XLK,  benchmark: QQQ}
+  - {symbol: INTC,  name: "Intel",                sector: XLK,  benchmark: QQQ, sub_industry: semi_logic}
+  - {symbol: QCOM,  name: "Qualcomm",             sector: XLK,  benchmark: QQQ, sub_industry: semi_logic}
+  - {symbol: TXN,   name: "Texas Instruments",    sector: XLK,  benchmark: QQQ, sub_industry: semi_analog}
+  - {symbol: ADI,   name: "Analog Devices",       sector: XLK,  benchmark: QQQ, sub_industry: semi_analog}
+  - {symbol: KLAC,  name: "KLA Corp",             sector: XLK,  benchmark: QQQ, sub_industry: semi_equip}
+  - {symbol: CDNS,  name: "Cadence Design",       sector: XLK,  benchmark: QQQ, sub_industry: semi_eda}
+  - {symbol: SNPS,  name: "Synopsys",             sector: XLK,  benchmark: QQQ, sub_industry: semi_eda}
   - {symbol: INTU,  name: "Intuit",               sector: XLK,  benchmark: QQQ}
   - {symbol: IBM,   name: "IBM",                  sector: XLK,  benchmark: SPY}
   - {symbol: CSCO,  name: "Cisco Systems",        sector: XLK,  benchmark: SPY}
   - {symbol: ACN,   name: "Accenture",            sector: XLK,  benchmark: SPY}
   - {symbol: MSI,   name: "Motorola Solutions",   sector: XLK,  benchmark: SPY}
   - {symbol: FTNT,  name: "Fortinet",             sector: XLK,  benchmark: QQQ}
-  - {symbol: TSM,   name: "TSMC (ADR)",           sector: XLK,  benchmark: QQQ}
-  - {symbol: ASML,  name: "ASML (ADR)",           sector: XLK,  benchmark: QQQ}
+  - {symbol: TSM,   name: "TSMC (ADR)",           sector: XLK,  benchmark: QQQ, sub_industry: semi_foundry}
+  - {symbol: ASML,  name: "ASML (ADR)",           sector: XLK,  benchmark: QQQ, sub_industry: semi_equip}
   - {symbol: T,     name: "AT&T",                 sector: XLC,  benchmark: SPY}
   - {symbol: VZ,    name: "Verizon",              sector: XLC,  benchmark: SPY}
   - {symbol: CMCSA, name: "Comcast",              sector: XLC,  benchmark: SPY}
@@ -230,12 +230,12 @@ stocks:
   # established mega-caps. Keyless Yahoo fundamentals; names that fail fall back
   # to the technical tier honestly, and the curated `spotlight:` overlay (below)
   # keeps the genuinely-in-focus ones from being buried by thin keyless data.
-  - {symbol: SNDK,  name: "SanDisk",              sector: XLK,  benchmark: QQQ}  # price_untrusted (see below)
-  - {symbol: WDC,   name: "Western Digital",      sector: XLK,  benchmark: QQQ}  # price_untrusted (see below)
+  - {symbol: SNDK,  name: "SanDisk",              sector: XLK,  benchmark: QQQ, sub_industry: memory}  # price_untrusted (see below)
+  - {symbol: WDC,   name: "Western Digital",      sector: XLK,  benchmark: QQQ, sub_industry: memory}  # price_untrusted (see below)
   - {symbol: COHR,  name: "Coherent",             sector: XLK,  benchmark: QQQ}
-  - {symbol: CRDO,  name: "Credo Technology",     sector: XLK,  benchmark: QQQ}
+  - {symbol: CRDO,  name: "Credo Technology",     sector: XLK,  benchmark: QQQ, sub_industry: semi_logic}
   - {symbol: NBIS,  name: "Nebius Group",         sector: XLK,  benchmark: QQQ}
-  - {symbol: "ON",  name: "ON Semiconductor",     sector: XLK,  benchmark: QQQ}  # quoted: bare ON is YAML bool true
+  - {symbol: "ON",  name: "ON Semiconductor",     sector: XLK,  benchmark: QQQ, sub_industry: semi_analog}  # quoted: bare ON is YAML bool true
   - {symbol: APP,   name: "AppLovin",             sector: XLK,  benchmark: QQQ}
   - {symbol: IONQ,  name: "IonQ",                 sector: XLK,  benchmark: QQQ}
   - {symbol: RGTI,  name: "Rigetti Computing",    sector: XLK,  benchmark: QQQ}
@@ -307,12 +307,17 @@ spotlight:
   - {symbol: AMD,  heat: 74, conviction: 60, theme_ko: "AI 가속기 2위 추격", theme_en: "AI accelerator #2",
      note_ko: "엔비디아의 유일한 현실적 대안으로, MI 가속기 점유율 확대 시 재평가 여지가 큼.",
      note_en: "The only credible #2 in AI accelerators — meaningful re-rating room if MI-series share keeps climbing."}
-  - {symbol: SNDK, heat: 72, conviction: 82, theme_ko: "메모리 슈퍼사이클", theme_en: "Memory super-cycle",
-     note_ko: "2025년 웨스턴디지털에서 분사한 낸드 순수주. 메모리 업사이클 초입의 전형적 '저평가 대어'. (목표 밴드는 데이터 점검 중)",
-     note_en: "The 2025 NAND pure-play spun out of Western Digital — a textbook value-disguised big bet at the front of a memory upcycle. (Target band withheld pending data review.)"}
-  - {symbol: MU,   heat: 70, conviction: 70, theme_ko: "HBM 메모리", theme_en: "HBM memory",
-     note_ko: "AI 서버용 고대역폭메모리(HBM) 핵심 공급사로 업황 반등 시 이익 레버리지가 큼.",
-     note_en: "A key high-bandwidth-memory (HBM) supplier for AI servers, with large earnings leverage as the cycle turns."}
+  # Memory names: the desk NO LONGER carries a "super-cycle" big-bet conviction —
+  # the NAND/DRAM pricing cycle has rolled over from its peak, so conviction is set
+  # to 0 (removes the Big-Bet 🐋 floor) and direction is left to the keyless
+  # sub-industry cycle signal. A modest `heat` keeps them visible on the HOT list
+  # (they still draw flows/coverage) with a note explaining the cycle has turned.
+  - {symbol: SNDK, heat: 48, conviction: 0, theme_ko: "메모리 사이클 점검", theme_en: "Memory cycle in question",
+     note_ko: "2025년 WD에서 분사한 낸드 순수주. 메모리 가격 사이클이 고점에서 꺾여, '슈퍼사이클' 대어 논지는 보류하고 사이클 반전 확인 전까지는 관망 대상. (목표 밴드는 데이터 점검 중)",
+     note_en: "The 2025 NAND pure-play spun out of Western Digital. With the memory pricing cycle rolling over from its peak, the 'super-cycle' big-bet thesis is on hold — a watch pending a pricing-cycle turn, not a conviction buy. (Target band withheld pending data review.)"}
+  - {symbol: MU,   heat: 48, conviction: 0, theme_ko: "HBM vs 범용 메모리 사이클", theme_en: "HBM vs commodity-memory cycle",
+     note_ko: "AI 서버용 HBM 수요는 견조하나 범용 DRAM/NAND는 공급과잉·가격 하강 국면. 사이클 의존적이라 대어 확신보다는 관망 대상.",
+     note_en: "AI-server HBM demand holds up, but commodity DRAM/NAND is in oversupply and price decline. Cycle-dependent — a watch rather than a conviction big-bet."}
   - {symbol: AVGO, heat: 68, conviction: 50, theme_ko: "맞춤형 AI 실리콘", theme_en: "Custom AI silicon",
      note_ko: "하이퍼스케일러 맞춤형 AI 칩과 네트워킹의 숨은 수혜주로 꾸준히 관심 상승.",
      note_en: "The quieter winner in custom hyperscaler AI silicon and networking — steadily rising attention."}

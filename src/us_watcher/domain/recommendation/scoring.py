@@ -13,6 +13,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from us_watcher.domain.enums import Horizon, MarketRegime, RecAction
 from us_watcher.domain.recommendation.config import (
     ACTION_THRESHOLDS,
+    ATTENTION_BONUS_MAX,
+    ATTENTION_HORIZON_FACTOR,
     BASE_CONFIDENCE,
     CALIBRATION_BLEND,
     CMS_WEIGHTS,
@@ -103,6 +105,7 @@ def score_recommendation(
     base_confidence: float = BASE_CONFIDENCE,
     applicable_keys: frozenset[str] | set[str] | None = None,
     confidence_target: float | None = None,
+    attention: float | None = None,
 ) -> ScoreResult:
     """Compute the total score, action, and contribution breakdown.
 
@@ -155,7 +158,17 @@ def score_recommendation(
 
     # Risk penalty (separate deduction, spec §24)
     risk_penalty = round((scores.risk / 100.0) * RISK_PENALTY_MAX, 2)
-    total = max(0.0, min(100.0, adjusted - risk_penalty))
+
+    # Attention nudge (separate, capped ADDITION — the editorial-heat axis not in any
+    # weighted component). Transparent: shown in the contribution breakdown.
+    attention_bonus = 0.0
+    if attention:
+        factor = ATTENTION_HORIZON_FACTOR.get(horizon, 0.0)
+        attention_bonus = round((max(0.0, min(100.0, attention)) / 100.0) * ATTENTION_BONUS_MAX * factor, 2)
+        if attention_bonus > 0.0:
+            contributions["attention"] = attention_bonus
+
+    total = max(0.0, min(100.0, adjusted - risk_penalty + attention_bonus))
 
     # Confidence blends base confidence, applicable-signal coverage, and data
     # quality. A well-covered call (keyless ETF or fundamentals-backed stock)
