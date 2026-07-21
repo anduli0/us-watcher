@@ -6,11 +6,16 @@ import pytest
 
 from us_watcher.domain.enums import Horizon, MarketRegime, RecAction
 from us_watcher.domain.recommendation.config import (
+    ATTENTION_BONUS_MAX,
     CMS_WEIGHTS,
     ETF_APPLICABLE_KEYS,
     HORIZON_WEIGHTS,
     STOCK_APPLICABLE_KEYS,
     WATCH_CONFIDENCE_FLOOR,
+)
+from us_watcher.domain.recommendation.features import (
+    blend_sub_industry_cycle,
+    sector_leadership_score,
 )
 from us_watcher.domain.recommendation.scoring import (
     ComponentScores,
@@ -99,6 +104,80 @@ def test_high_risk_low_score_is_avoid_not_sell():
     assert decide_action(40.0, confidence=60.0, risk=85.0) == RecAction.AVOID
 
 
+# --- Publishable-edge gate (spec §32): a committed directional call must clear
+# 60% CALIBRATED confidence. 50% is a pure coin flip; below the 60% bar the call
+# is shown only as WATCH (buy-side) / HOLD (sell-side), never as committed advice.
+
+
+def test_publish_gate_buy_side_at_the_60_boundary():
+    assert decide_action(72.0, confidence=59.9, risk=10.0) == RecAction.WATCH
+    assert decide_action(72.0, confidence=60.0, risk=10.0) == RecAction.BUY
+    # Accumulate and strong_buy are gated too.
+    assert decide_action(60.0, confidence=59.9, risk=10.0) == RecAction.WATCH
+    assert decide_action(85.0, confidence=59.9, risk=10.0) == RecAction.WATCH
+
+
+def test_publish_gate_demotes_sub_60_sell_side_to_hold():
+    # Sell-side priors are 43.6/36.8/34.0% (H20/60/120) — well under the 60% bar
+    # — so an unconfident REDUCE/SELL/AVOID demotes to HOLD, never published.
+    assert decide_action(40.0, confidence=59.9, risk=10.0) == RecAction.HOLD   # was REDUCE
+    assert decide_action(30.0, confidence=59.9, risk=10.0) == RecAction.HOLD   # was SELL
+    assert decide_action(10.0, confidence=59.9, risk=10.0) == RecAction.HOLD   # was AVOID
+    # At or above the floor the sell-side call publishes as committed.
+    assert decide_action(40.0, confidence=60.0, risk=10.0) == RecAction.REDUCE
+    assert decide_action(30.0, confidence=60.0, risk=10.0) == RecAction.SELL
+
+
+def test_publish_gate_uses_post_calibration_confidence():
+    # Through score_recommendation: a REDUCE-range score whose confidence is
+    # dragged below the 60% bar by a low empirical target (sell prior far under
+    # it) is demoted to HOLD; the same call without the calibration blend publishes.
+    scores = _uniform_scores(40.0, data_quality=50.0)
+    plain = score_recommendation(scores, horizon=Horizon.MEDIUM,
+                                 applicable_keys=STOCK_APPLICABLE_KEYS)
+    calibrated = score_recommendation(scores, horizon=Horizon.MEDIUM,
+                                      applicable_keys=STOCK_APPLICABLE_KEYS,
+                                      confidence_target=36.8)  # measured H60 sell prior
+    assert plain.action == RecAction.REDUCE
+    assert calibrated.confidence < WATCH_CONFIDENCE_FLOOR
+    assert calibrated.action == RecAction.HOLD
+
+
+# --- Short-horizon selectivity (measured): only the >=70 score bucket separated
+# at 20d in the backtest (+5.7% vs ~+2% below), so short committed buys need
+# hi conviction or step down one action level.
+
+
+def test_short_horizon_buy_below_hi_conviction_steps_down():
+    assert decide_action(69.0, confidence=60.0, risk=10.0) == RecAction.BUY
+    assert decide_action(69.0, confidence=60.0, risk=10.0,
+                         hi_conviction_floor=70.0) == RecAction.ACCUMULATE
+    # At/above the floor the committed buy stands.
+    assert decide_action(70.0, confidence=60.0, risk=10.0,
+                         hi_conviction_floor=70.0) == RecAction.BUY
+
+
+def test_short_horizon_selectivity_through_scoring():
+    scores = _uniform_scores(69.0)
+    short = score_recommendation(scores, horizon=Horizon.SHORT,
+                                 applicable_keys=STOCK_APPLICABLE_KEYS)
+    medium = score_recommendation(scores, horizon=Horizon.MEDIUM,
+                                  applicable_keys=STOCK_APPLICABLE_KEYS)
+    # Same total score; only the SHORT horizon applies the selectivity gate.
+    assert short.total_score == medium.total_score == 69.0
+    assert medium.action == RecAction.BUY
+    assert short.action == RecAction.ACCUMULATE
+
+
+def _uniform_scores(level: float, *, data_quality: float = 90.0) -> ComponentScores:
+    return ComponentScores(
+        technical=level, fundamental_quality=level, valuation=level,
+        earnings_revision=level, sector_leadership=level, macro_fit=level,
+        news_catalyst=level, capital_migration=level, emerging_theme=level,
+        flow_positioning=level, risk=0.0, data_quality=data_quality,
+    )
+
+
 def test_capital_migration_score_partial_coverage():
     score, coverage = capital_migration_score({"capex_growth": 80, "moat_barriers": 90})
     assert 0 < score <= 100
@@ -173,7 +252,10 @@ def test_applicable_coverage_lifts_etf_confidence_above_absolute():
 
 
 def test_keyless_etf_tier_spans_action_space():
-    # The keyless tier must express the FULL range, not collapse to one action.
+    # The keyless tier must express the FULL range, not collapse to one action:
+    # a strong ETF commits to a buy; a weak one lands in a non-buy stance. Its
+    # committed sell is only published if it clears the 60% publishable-edge bar
+    # — below it (56% here) the sell-side call correctly demotes to HOLD.
     strong = score_recommendation(_strong_etf(), horizon=Horizon.SHORT,
                                   regime=MarketRegime.MODERATE_UPTREND, applicable_keys=ETF_APPLICABLE_KEYS)
     weak = score_recommendation(
@@ -181,7 +263,8 @@ def test_keyless_etf_tier_spans_action_space():
                         risk=55, data_quality=68),
         horizon=Horizon.SHORT, regime=MarketRegime.CORRECTION, applicable_keys=ETF_APPLICABLE_KEYS)
     assert strong.action in _BUY_FAMILY
-    assert weak.action in _BEARISH
+    assert weak.action not in _BUY_FAMILY
+    assert weak.action in (RecAction.HOLD, RecAction.WATCH, *_BEARISH)
 
 
 def test_missing_fundamentals_lowers_stock_confidence():
@@ -196,3 +279,79 @@ def test_missing_fundamentals_lowers_stock_confidence():
     c_full = score_recommendation(ComponentScores(**full), horizon=Horizon.MEDIUM,
                                   applicable_keys=STOCK_APPLICABLE_KEYS).confidence
     assert c_full > c_partial
+
+
+# --- Sub-industry cycle blend (memory downcycle vs logic strength) ------------
+
+def test_sub_industry_cycle_drags_a_name_whose_group_is_rolling_over():
+    # A memory name whose OWN 1-month RS is flat (+0%) is pulled down once its
+    # sub-industry group's cycle RS is deeply negative (the downcycle), and the
+    # resulting sector-leadership score is lower than the un-blended one.
+    own = 0.0
+    dragged = blend_sub_industry_cycle(own, -0.15)  # group −15% vs market
+    assert dragged is not None and dragged < own
+    assert sector_leadership_score(dragged) < sector_leadership_score(own)
+
+
+def test_sub_industry_cycle_lifts_a_lagging_member_of_a_strong_group():
+    # A logic name lagging (−3%) is lifted when its group cycle is strongly positive.
+    own = -0.03
+    lifted = blend_sub_industry_cycle(own, 0.12, group_weight=0.4)
+    assert lifted is not None and lifted > own
+
+
+def test_sub_industry_cycle_untouched_without_group_read():
+    # Unclassified names (no group cycle) are returned exactly as-is.
+    assert blend_sub_industry_cycle(0.05, None) == 0.05
+    assert blend_sub_industry_cycle(None, None) is None
+
+
+def test_sub_industry_cycle_blend_is_a_weighted_average():
+    # Explicit weighting contract: 0.6*own + 0.4*group at the default weight.
+    assert blend_sub_industry_cycle(0.10, -0.10, group_weight=0.4) == pytest.approx(0.02)
+
+
+_ATTN_CS = dict(technical=60, flow_positioning=55, sector_leadership=58, macro_fit=55,
+                earnings_revision=57, fundamental_quality=55, valuation=55, news_catalyst=55,
+                capital_migration=55, emerging_theme=55, risk=20, data_quality=80)
+
+
+def test_attention_lifts_short_score_but_is_capped():
+    cs = ComponentScores(**_ATTN_CS)
+    base = score_recommendation(cs, horizon=Horizon.SHORT).total_score
+    hot = score_recommendation(cs, horizon=Horizon.SHORT, attention=100)
+    assert hot.total_score > base
+    assert hot.total_score - base <= ATTENTION_BONUS_MAX + 0.05  # never more than the cap
+    assert hot.contributions.get("attention") == pytest.approx(ATTENTION_BONUS_MAX)
+
+
+def test_attention_is_half_at_medium_and_ignored_long():
+    cs = ComponentScores(**_ATTN_CS)
+    d_med = (score_recommendation(cs, horizon=Horizon.MEDIUM, attention=100).total_score
+             - score_recommendation(cs, horizon=Horizon.MEDIUM).total_score)
+    d_long = (score_recommendation(cs, horizon=Horizon.MEDIUM_LONG, attention=100).total_score
+              - score_recommendation(cs, horizon=Horizon.MEDIUM_LONG).total_score)
+    assert d_med == pytest.approx(ATTENTION_BONUS_MAX / 2, abs=0.06)
+    assert d_long == pytest.approx(0.0, abs=0.01)
+
+
+def test_attention_alone_cannot_manufacture_a_buy():
+    # A firmly-HOLD score plus maxed attention must NOT clear the BUY bar — buzz
+    # nudges across a threshold at most, it does not conjure a committed buy.
+    cs = ComponentScores(technical=48, flow_positioning=47, sector_leadership=48, macro_fit=48,
+                         earnings_revision=47, fundamental_quality=48, news_catalyst=47,
+                         risk=20, data_quality=80)
+    hot = score_recommendation(cs, horizon=Horizon.SHORT, attention=100)
+    assert hot.action not in _BUY_FAMILY
+
+
+def test_universe_separates_memory_from_logic_semis():
+    # The classification the whole cycle signal rests on: Micron/SanDisk are memory,
+    # Intel/NVIDIA are logic — never lumped into one undifferentiated "semiconductor".
+    from us_watcher.domain.universe import get_universe
+
+    groups = get_universe().sub_industry_members()
+    assert {"MU", "SNDK"} <= set(groups.get("memory", []))
+    assert {"INTC", "NVDA"} <= set(groups.get("semi_logic", []))
+    assert "MU" not in groups.get("semi_logic", [])
+    assert "INTC" not in groups.get("memory", [])

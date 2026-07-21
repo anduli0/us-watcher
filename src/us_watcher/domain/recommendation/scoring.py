@@ -13,6 +13,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from us_watcher.domain.enums import Horizon, MarketRegime, RecAction
 from us_watcher.domain.recommendation.config import (
     ACTION_THRESHOLDS,
+    ATTENTION_BONUS_MAX,
+    ATTENTION_HORIZON_FACTOR,
     BASE_CONFIDENCE,
     CALIBRATION_BLEND,
     CMS_WEIGHTS,
@@ -21,6 +23,7 @@ from us_watcher.domain.recommendation.config import (
     RISK_OFF_CONFIDENCE_HAIRCUT,
     RISK_OFF_REGIMES,
     RISK_PENALTY_MAX,
+    SHORT_BUY_HI_CONVICTION_FLOOR,
     WATCH_CONFIDENCE_FLOOR,
 )
 
@@ -103,6 +106,7 @@ def score_recommendation(
     base_confidence: float = BASE_CONFIDENCE,
     applicable_keys: frozenset[str] | set[str] | None = None,
     confidence_target: float | None = None,
+    attention: float | None = None,
 ) -> ScoreResult:
     """Compute the total score, action, and contribution breakdown.
 
@@ -155,7 +159,17 @@ def score_recommendation(
 
     # Risk penalty (separate deduction, spec §24)
     risk_penalty = round((scores.risk / 100.0) * RISK_PENALTY_MAX, 2)
-    total = max(0.0, min(100.0, adjusted - risk_penalty))
+
+    # Attention nudge (separate, capped ADDITION — the editorial-heat axis not in any
+    # weighted component). Transparent: shown in the contribution breakdown.
+    attention_bonus = 0.0
+    if attention:
+        factor = ATTENTION_HORIZON_FACTOR.get(horizon, 0.0)
+        attention_bonus = round((max(0.0, min(100.0, attention)) / 100.0) * ATTENTION_BONUS_MAX * factor, 2)
+        if attention_bonus > 0.0:
+            contributions["attention"] = attention_bonus
+
+    total = max(0.0, min(100.0, adjusted - risk_penalty + attention_bonus))
 
     # Confidence blends base confidence, applicable-signal coverage, and data
     # quality. A well-covered call (keyless ETF or fundamentals-backed stock)
@@ -176,8 +190,13 @@ def score_recommendation(
         confidence = (1.0 - CALIBRATION_BLEND) * confidence + CALIBRATION_BLEND * confidence_target
     confidence = round(confidence, 1)
 
-    action = decide_action(total, confidence=confidence, risk=scores.risk,
-                           buy_shift=RISK_OFF_BUY_SHIFT if risk_off else 0.0)
+    action = decide_action(
+        total, confidence=confidence, risk=scores.risk,
+        buy_shift=RISK_OFF_BUY_SHIFT if risk_off else 0.0,
+        # Short-horizon selectivity (measured): only the hi-conviction score
+        # bucket separates at 20d, so short committed buys need score >= 70.
+        hi_conviction_floor=SHORT_BUY_HI_CONVICTION_FLOOR if horizon is Horizon.SHORT else None,
+    )
     return ScoreResult(
         total_score=round(total, 1),
         raw_weighted=round(raw, 1),
@@ -191,18 +210,24 @@ def score_recommendation(
     )
 
 
-def decide_action(total: float, *, confidence: float, risk: float, buy_shift: float = 0.0) -> RecAction:
+def decide_action(
+    total: float, *, confidence: float, risk: float, buy_shift: float = 0.0,
+    hi_conviction_floor: float | None = None,
+) -> RecAction:
     """Map total score -> action with WATCH/AVOID nuance (spec §23).
 
     Uncertain cases are NOT all forced to HOLD: a promising score held back by
     low confidence becomes WATCH; a structurally unattractive risk/reward becomes
     AVOID rather than SELL. ``buy_shift`` raises the buy-side thresholds (used by
     the risk-off regime gate — a bear-market BUY must clear a stiffer bar).
+    ``hi_conviction_floor`` steps a committed buy down one level below it (the
+    short-horizon selectivity gate: only the >=70 score bucket separated in the
+    20d backtest calibration, +5.7% vs ~+2% for every bucket below).
     """
     t = ACTION_THRESHOLDS
     if risk >= 78.0 and total < t["buy"] + buy_shift:
-        return RecAction.AVOID
-    if total >= t["strong_buy"] + buy_shift:
+        base = RecAction.AVOID
+    elif total >= t["strong_buy"] + buy_shift:
         base = RecAction.STRONG_BUY
     elif total >= t["buy"] + buy_shift:
         base = RecAction.BUY
@@ -217,7 +242,22 @@ def decide_action(total: float, *, confidence: float, risk: float, buy_shift: fl
     else:
         base = RecAction.AVOID
 
-    # Promising but under-confirmed -> WATCH instead of a committed BUY.
-    if base in (RecAction.BUY, RecAction.ACCUMULATE) and confidence < WATCH_CONFIDENCE_FLOOR:
-        return RecAction.WATCH
+    # Measured selectivity: below the hi-conviction floor the forward-return
+    # edge is flat, so a committed buy steps down one action level.
+    if hi_conviction_floor is not None and total < hi_conviction_floor:
+        if base is RecAction.STRONG_BUY:
+            base = RecAction.BUY
+        elif base is RecAction.BUY:
+            base = RecAction.ACCUMULATE
+
+    # Publishable-edge gate (spec §32): a directional call whose CALIBRATED
+    # confidence is below the floor (60% — a real margin over the 50% coin flip)
+    # lacks a publishable edge and is never shown as committed advice. Promising
+    # but under-confirmed buys -> WATCH; an unconfident sell-side call -> HOLD
+    # (the ladder's neutral stance — the measured sell priors are far under the bar).
+    if confidence < WATCH_CONFIDENCE_FLOOR:
+        if base in (RecAction.STRONG_BUY, RecAction.BUY, RecAction.ACCUMULATE):
+            return RecAction.WATCH
+        if base in (RecAction.REDUCE, RecAction.SELL, RecAction.AVOID):
+            return RecAction.HOLD
     return base

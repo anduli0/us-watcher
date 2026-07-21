@@ -6,7 +6,7 @@ REM
 REM SINGLE-INSTANCE BY DESIGN: if something already listens on 3002, stand by
 REM instead of killing it -- prevents two supervisors thrashing the port.
 :loop
-powershell -NoProfile -Command "try { $c = New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1',3002); $c.Close(); exit 0 } catch { exit 1 }"
+curl.exe -s -o nul --connect-timeout 4 http://127.0.0.1:3002/ 2>nul
 if not errorlevel 1 (
   timeout /t 20 /nobreak >nul
   goto loop

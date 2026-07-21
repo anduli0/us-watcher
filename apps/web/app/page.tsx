@@ -87,7 +87,7 @@ function PulseHeader({ data }: { data: NonNullable<ReturnType<typeof api.overvie
   return (
     <section className="card">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-[260px] flex-1">
+        <div className="min-w-[min(260px,100%)] flex-1">
           <div className="section-label">{t("regime")}</div>
           <div className="mt-1 text-3xl font-bold tracking-tight">{regimeLabel}</div>
           <div className="mt-3 max-w-2xl text-sm text-muted">

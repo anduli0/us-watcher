@@ -19,6 +19,7 @@ from us_watcher.config import get_settings
 from us_watcher.db.repositories import (
     add_audit_event,
     latest_recommendations,
+    list_news_clusters,
     record_big_bets_weekly,
     save_recommendation,
 )
@@ -27,8 +28,13 @@ from us_watcher.domain.analytics.indicators import relative_strength
 from us_watcher.domain.analytics.series import closes
 from us_watcher.domain.enums import AssetType, DataStatus, Horizon, RecAction
 from us_watcher.domain.fundamentals import EdgarFacts, FundamentalSnapshot
-from us_watcher.domain.recommendation.config import ETF_APPLICABLE_KEYS, STOCK_APPLICABLE_KEYS
-from us_watcher.domain.recommendation.features import build_component_scores
+from us_watcher.domain.recommendation.catalyst import news_catalyst_score
+from us_watcher.domain.recommendation.config import (
+    CYCLICAL_SUB_INDUSTRIES,
+    ETF_APPLICABLE_KEYS,
+    STOCK_APPLICABLE_KEYS,
+)
+from us_watcher.domain.recommendation.features import blend_sub_industry_cycle, build_component_scores
 from us_watcher.domain.recommendation.schemas import Recommendation, Scenario
 from us_watcher.domain.recommendation.scoring import ComponentScores, ScoreResult, score_recommendation
 from us_watcher.domain.time import now_utc
@@ -154,6 +160,33 @@ async def generate_recommendations() -> dict:
     spy_series = agg.get("SPY")
     spy_closes = closes(spy_series.bars) if spy_series and spy_series.bars else []
 
+    # Sub-industry cycle read (keyless, deterministic): the mean 63-session (≈3-month)
+    # relative strength of each classified group's members vs SPY — where that
+    # sub-industry's price cycle sits right now. Blended into each member's
+    # sector-leadership signal below so a rolling-over group (e.g. memory in a
+    # downcycle) drags its names and a strengthening one (e.g. logic) lifts them,
+    # independent of each name's lagging trailing fundamentals.
+    group_cycle_rs: dict[str, float] = {}
+    if spy_closes:
+        for _label, _syms in u.sub_industry_members().items():
+            _vals = []
+            for _sym in _syms:
+                _s = agg.get(_sym)
+                if _s is not None and len(_s.bars) >= 64:
+                    _r = relative_strength(closes(_s.bars), spy_closes, 63)
+                    if _r is not None:
+                        _vals.append(_r)
+            if _vals:
+                group_cycle_rs[_label] = sum(_vals) / len(_vals)
+
+    # News catalysts: read recently-synced, ticker-tagged clusters (populated by the
+    # separate news-sync pipeline) and group them per ticker. This revives the
+    # news_catalyst component so company-specific catalysts reach the score.
+    news_by_ticker: dict[str, list[dict]] = {}
+    for _cl in await list_news_clusters(limit=200):
+        for _sym in (_cl.get("related") or {}).get("securities", []):
+            news_by_ticker.setdefault(_sym, []).append(_cl)
+
     # fundamentals (Yahoo) + SEC EDGAR capex/R&D for stocks; yields for covered-call ETFs
     stock_syms = [s.symbol for s in stock_candidates]
     cc_syms = [c.symbol for c in cc_candidates]
@@ -181,12 +214,20 @@ async def generate_recommendations() -> dict:
             rs = relative_strength(cs, spy_closes, 21) if spy_closes else None
         else:
             rs = rel_by_symbol.get(inst.symbol)
+        # Fold the sub-industry cycle into a classified stock's relative strength —
+        # but ONLY for CYCLICAL sub-industries where the calibration shows the cycle
+        # state predicts forward return (memory/equip/analog). For secular groups
+        # (logic/eda) the cycle state MEAN-REVERTS, so a blend there hurt accuracy.
+        if is_stock and inst.sub_industry in CYCLICAL_SUB_INDUSTRIES:
+            rs = blend_sub_industry_cycle(rs, group_cycle_rs.get(inst.sub_industry))
         fund = funds.get(inst.symbol) if is_stock else None
         edgar = edgars.get(inst.symbol) if is_stock else None
         cc_fund = cc_funds.get(inst.symbol) if is_cc else None
+        news_cat = news_catalyst_score(
+            news_by_ticker.get(inst.symbol, []), feat.returns.get("r5")) if is_stock else None
         scores, cms_detail = build_component_scores(
             feat, series.bars, regime_score=regime_score, rel_strength_1m=rs,
-            fund=fund, edgar=edgar, current_price=cs[-1],
+            fund=fund, edgar=edgar, current_price=cs[-1], news_catalyst=news_cat,
         )
         spot = u.spotlight.get(inst.symbol) if is_stock else None
         # Confidence coverage must be measured against what this asset class can
@@ -199,8 +240,10 @@ async def generate_recommendations() -> dict:
             # on, then the empirical hit-rate target for that side/horizon/
             # conviction/regime is blended into the final confidence (and the
             # WATCH floor re-checked against the calibrated value).
+            attention = spot.heat if spot else None
             prelim = score_recommendation(
-                scores, horizon=horizon, regime=regime, applicable_keys=applicable_keys
+                scores, horizon=horizon, regime=regime, applicable_keys=applicable_keys,
+                attention=attention,
             )
             target = confidence_target_pct(
                 HORIZON_DAYS[horizon], prelim.total_score, action_side(prelim.action),
@@ -208,12 +251,13 @@ async def generate_recommendations() -> dict:
             )
             result = score_recommendation(
                 scores, horizon=horizon, regime=regime, applicable_keys=applicable_keys,
-                confidence_target=target,
+                confidence_target=target, attention=attention,
             )
             rec = _build_recommendation(inst, feat, scores, result, horizon, overview.pulse,
                                         cms_detail=cms_detail, fund=fund, is_stock=is_stock,
                                         is_covered_call=is_cc, cc_fund=cc_fund, spotlight=spot,
-                                        price_status=series.status)
+                                        price_status=series.status,
+                                        news_clusters=news_by_ticker.get(inst.symbol) if is_stock else None)
             saved = await save_recommendation(
                 rec.model_dump(mode="json"),
                 ticker=inst.symbol, horizon=horizon.value, action=result.action.value,
@@ -274,6 +318,7 @@ def _build_recommendation(
     horizon: Horizon, pulse: RegimePulse, *, cms_detail: dict, fund: FundamentalSnapshot | None,
     is_stock: bool, is_covered_call: bool = False, cc_fund: FundamentalSnapshot | None = None,
     spotlight: SpotlightEntry | None = None, price_status: DataStatus = DataStatus.DELAYED,
+    news_clusters: list[dict] | None = None,
 ) -> Recommendation:
     r20 = feat.returns.get("r20")
     vol = feat.realized_vol_20
@@ -282,7 +327,7 @@ def _build_recommendation(
         inst, feat, scores, result, fund)
     bull, base, bear = _scenarios(result.total_score, vol, inst.name)
     thesis_en, thesis_ko = _thesis(inst, result, horizon, r20)
-    cat_en, cat_ko = _catalysts(inst, pulse)
+    cat_en, cat_ko = _catalysts(inst, pulse, news_clusters)
     if spotlight is not None:
         # Surface WHY this name is highlighted (honest, labelled as a focus theme).
         if spotlight.note_en:
@@ -528,13 +573,29 @@ def _evidence(
     return (reasons_en[:4], reasons_ko[:4]), (risks_en[:4], risks_ko[:4]), (inval_en[:3], inval_ko[:3])
 
 
-def _catalysts(inst: Instrument, pulse: RegimePulse) -> tuple[list[str], list[str]]:
-    return (
-        ["Upcoming macro prints (CPI/PCE, jobs) and FOMC communication.",
-         f"Sector earnings season relevant to {inst.name}."],
-        ["다가오는 주요 경제지표(소비자물가·고용)와 연준(FOMC)의 신호.",
-         f"{inst.name}이(가) 속한 섹터의 실적 시즌."],
-    )
+def _catalysts(
+    inst: Instrument, pulse: RegimePulse, news_clusters: list[dict] | None = None
+) -> tuple[list[str], list[str]]:
+    en: list[str] = []
+    ko: list[str] = []
+    if news_clusters:
+        # Real, ticker-tagged headlines (sanitised at ingestion, shown as DATA) — the
+        # actual coverage this name is drawing, not a boilerplate calendar. Top by
+        # importance, freshest first among ties.
+        top = sorted(news_clusters,
+                     key=lambda c: (c.get("importance") or 0.0, c.get("last_seen") or ""),
+                     reverse=True)[:2]
+        for c in top:
+            hl = str(c.get("headline") or "").strip()
+            if hl:
+                en.append(f"📰 {hl}")
+                ko.append(f"📰 관련 뉴스: {hl}")
+    en.append("Upcoming macro prints (CPI/PCE, jobs) and FOMC communication.")
+    ko.append("다가오는 주요 경제지표(소비자물가·고용)와 연준(FOMC)의 신호.")
+    if not news_clusters:
+        en.append(f"Sector earnings season relevant to {inst.name}.")
+        ko.append(f"{inst.name}이(가) 속한 섹터의 실적 시즌.")
+    return en[:3], ko[:3]
 
 
 def _scenarios(total: float, vol: float | None, inst_name: str) -> tuple[Scenario, Scenario, Scenario]:

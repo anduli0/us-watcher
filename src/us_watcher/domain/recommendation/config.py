@@ -42,6 +42,18 @@ HORIZON_WEIGHTS: dict[Horizon, dict[str, float]] = {
     },
 }
 
+# Sub-industries whose CYCLE state predicts forward EXCESS return — the ONLY groups
+# the sub-industry cycle blend is applied to. MEASURED by accuracy/cycle_calibration.py
+# over 5y keyless history (2026-07-14; 22 semis vs SPY, point-in-time, no look-ahead).
+# H120 cycle-ON minus cycle-OFF mean excess return:
+#   memory +96, semi_equip +7.4, semi_analog +4.1  -> cyclical (cycle-OFF underperforms)
+#   semi_logic -15.6, semi_eda -4.9                 -> secular / mean-reverting: EXCLUDED
+#     (a cycle discount there HURT forward return — a uniform blend is NOT supported).
+#   semi_foundry: n<2 peers, no read -> excluded.
+# The signs agree with economic priors (commodity/capex-cyclical vs secular growth), so
+# this is not a single-sample artefact. Re-run the calibration to refresh membership.
+CYCLICAL_SUB_INDUSTRIES: frozenset[str] = frozenset({"memory", "semi_equip", "semi_analog"})
+
 # Capital Migration Score components (must sum to 100), spec §25.
 CMS_WEIGHTS: dict[str, float] = {
     "capex_growth": 15,
@@ -69,8 +81,29 @@ ACTION_THRESHOLDS = {
 
 # Risk penalty: risk score (0-100, higher=riskier) scaled into points subtracted.
 RISK_PENALTY_MAX = 22.0
-# Confidence floor below which a would-be BUY is demoted to WATCH (spec §23).
-WATCH_CONFIDENCE_FLOOR = 45.0
+
+# Attention nudge (spec §23): the editorial spotlight `heat` — a labelled house read
+# of real-world attention the keyless signals miss (e.g. a name suddenly all over the
+# tape) — may LIFT the action score by up to this many points. It is the one
+# attention axis NOT already inside a weighted component (momentum, CMS, analyst
+# breadth and news direction are all scored elsewhere), so wiring it here does not
+# double-count. Deliberately small: enough to nudge a genuinely in-focus name across
+# a threshold, never enough to manufacture a BUY on buzz alone. Applied at SHORT (full)
+# and MEDIUM (half); long-horizon calls ignore it.
+ATTENTION_BONUS_MAX = 6.0
+ATTENTION_HORIZON_FACTOR: dict[Horizon, float] = {
+    Horizon.SHORT: 1.0,
+    Horizon.MEDIUM: 0.5,
+    Horizon.MEDIUM_LONG: 0.0,
+}
+# Confidence floor below which a would-be directional call is demoted (spec §23,
+# §32): a buy-side call becomes WATCH, a sell-side call becomes HOLD. 60.0 is the
+# minimum-publishable-edge line — 50% is a pure coin flip, so a committed call
+# must clear it by a real margin before it is published as advice. A directional
+# call whose CALIBRATED confidence is below 60% is shown only as WATCH/HOLD.
+# (The measured sell-side priors are 43.6/36.8/34.0% at H20/60/120 — well under
+# the bar — so ungated sells were the biggest leak this floor closes.)
+WATCH_CONFIDENCE_FLOOR = 60.0
 
 # Base confidence anchor for a fully-covered, good-data call (before coverage &
 # data-quality scaling). Tuned so a WELL-COVERED keyless ETF call clears the
@@ -90,6 +123,16 @@ RISK_OFF_REGIMES: frozenset[MarketRegime] = frozenset(
 )
 # Added to the strong_buy/buy/accumulate thresholds when the regime is risk-off.
 RISK_OFF_BUY_SHIFT = 6.0
+
+# --- Short-horizon selectivity gate (measured, spec §32) ----------------------
+# Evidence (point-in-time backtest, production snapshot 2026-07): the 20d
+# calibration buckets show forward return is FLAT below score 70 — avg
+# +2.03/+1.69/+2.27/+1.84% for the 0-40/40-50/50-60/60-70 buckets — and only
+# the 70-100 bucket separates (+5.70%, n=493; the same bucket leads at 60d
+# +13.16% and 120d +22.91%). A SHORT-horizon committed buy therefore requires
+# hi-conviction (total score >= this floor); below it the action steps down one
+# level (strong_buy -> buy, buy -> accumulate).
+SHORT_BUY_HI_CONVICTION_FLOOR = 70.0
 # Confidence points deducted in risk-off (≈ the measured hit-rate drop).
 RISK_OFF_CONFIDENCE_HAIRCUT = 10.0
 

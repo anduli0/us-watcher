@@ -33,6 +33,7 @@ export default function MethodologyPage() {
                   )}
                   <span className="chip text-muted">{acc.data.backtest.universe_size} {lang === "ko" ? "종목" : "names"}</span>
                 </div>
+                <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead><tr className="text-left text-[11px] uppercase text-muted">
                     <th className="pb-1">{lang === "ko" ? "기간(일)" : "Horizon (d)"}</th>
@@ -53,11 +54,13 @@ export default function MethodologyPage() {
                     ))}
                   </tbody>
                 </table>
+                </div>
                 <p className="mt-2 text-[11px] text-muted">{acc.data.backtest.note}</p>
               </div>
             )}
             {acc.data.by_horizon && Object.keys(acc.data.by_horizon).length > 0 && (
-              <table className="mt-3 w-full text-sm">
+              <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-sm">
                 <thead><tr className="text-left text-[11px] uppercase text-muted">
                   <th className="pb-1">Horizon (d)</th><th className="pb-1 text-right">N</th>
                   <th className="pb-1 text-right">Hit rate</th><th className="pb-1 text-right">Avg ret</th><th className="pb-1 text-right">Avg excess</th>
@@ -73,6 +76,7 @@ export default function MethodologyPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         )}

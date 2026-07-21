@@ -26,6 +26,7 @@ class Instrument:
     market: str | None = None
     asset_type: str | None = None
     gics: str | None = None
+    sub_industry: str | None = None
     style: str | None = None
     is_proxy: bool = False
     extra: dict[str, Any] = field(default_factory=dict)
@@ -86,6 +87,21 @@ class Universe:
                 return inst
         return None
 
+    def sub_industry_members(self) -> dict[str, list[str]]:
+        """Map each ``sub_industry`` label to the stock symbols carrying it.
+
+        Only stocks classified in ``universe.yml`` appear; unclassified names are
+        omitted (they simply get no sub-industry cycle signal). Used to compute a
+        keyless, deterministic sub-industry relative-strength (cycle) read so a
+        rolling-over group — e.g. memory in a downcycle — drags its members and a
+        strengthening one lifts them, independent of each name's trailing data.
+        """
+        groups: dict[str, list[str]] = {}
+        for inst in self.stocks:
+            if inst.sub_industry:
+                groups.setdefault(inst.sub_industry, []).append(inst.symbol)
+        return groups
+
     def yahoo_symbols(self, instruments: list[Instrument]) -> dict[str, str]:
         return {i.symbol: i.yahoo_symbol for i in instruments if i.yahoo_symbol}
 
@@ -116,6 +132,7 @@ def _mk_stock(d: dict[str, Any]) -> Instrument:
         yahoo_symbol=d.get("yahoo_symbol", d["symbol"]),
         asset_type="stock",
         gics=d.get("sector"),
+        sub_industry=d.get("sub_industry"),
         extra={"benchmark": d.get("benchmark", "SPY"), "sector_etf": d.get("sector")},
     )
 

@@ -56,6 +56,11 @@ class Settings(BaseSettings):
             "US Treasury yields",
         ]
     )
+    # Per-stock news: additionally query Google News for the first N stock-universe
+    # names (query = "<name> stock"), so the news_catalyst component can see
+    # company-specific catalysts (product launches, guidance) — not just macro
+    # themes. Each name is one extra RSS GET per sync; 0 disables per-stock news.
+    news_stock_query_limit: int = 60
 
     # --- LLM provider abstraction (per role; mock when unset) ---
     agent_runtime: str = "mock"  # "mock" | "llm"

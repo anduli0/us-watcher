@@ -9,7 +9,7 @@ REM a second supervisor into a passive stand-by (graceful failover) rather than 
 REM rival that taskkills the live listener -- which eliminates the port-thrash that
 REM caused intermittent "API connection failed".
 :loop
-powershell -NoProfile -Command "try { $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 4 'http://127.0.0.1:8088/health'; if ([int]$r.StatusCode -ge 200 -and [int]$r.StatusCode -lt 300) { exit 0 } else { exit 1 } } catch { exit 1 }"
+curl.exe -s -o nul -w "%%{http_code}" --connect-timeout 4 http://127.0.0.1:8088/health 2>nul | findstr /r "^2" >nul
 if not errorlevel 1 (
   REM A healthy API is already serving -- stand by; do NOT reclaim or restart.
   timeout /t 20 /nobreak >nul

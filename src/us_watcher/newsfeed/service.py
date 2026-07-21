@@ -15,6 +15,7 @@ import re
 import uuid
 from collections.abc import Iterable
 from datetime import datetime, timedelta
+from functools import lru_cache
 
 from sqlalchemy import select
 
@@ -60,7 +61,21 @@ def _extract_entities(title: str) -> dict:
         "indices": sorted({v for k, v in _INDEX_TAGS.items() if k in low}),
         "sectors": sorted({v for k, v in _SECTOR_TAGS.items() if k in low}),
         "macro": sorted({v for k, v in _MACRO_TAGS.items() if k in low}),
+        "securities": [],  # ticker tags are attributed from the fetch topic, not the title
     }
+
+
+@lru_cache(maxsize=1)
+def _stock_query_map(limit: int) -> dict[str, str]:
+    """Map ``"<name> stock"`` query -> ticker for the first ``limit`` stock-universe
+    names. The provider echoes the query as each article's ``topic``, so returned
+    articles attribute unambiguously to that ticker (no fuzzy name matching)."""
+    from us_watcher.domain.universe import get_universe
+
+    out: dict[str, str] = {}
+    for inst in get_universe().stocks[: max(0, limit)]:
+        out[f"{inst.name} stock"] = inst.symbol
+    return out
 
 
 def _entity_importance(related: dict) -> float:
@@ -92,7 +107,10 @@ def _jaccard(a: set[str], b: set[str]) -> float:
 async def sync_news() -> dict:
     settings = get_settings()
     provider = get_news_provider()
-    topics = settings.news_topics
+    # Macro/theme topics + per-stock name queries (topic → ticker map). Company
+    # news is what lets the news_catalyst component see product launches & guidance.
+    stock_map = _stock_query_map(settings.news_stock_query_limit)
+    topics = [*settings.news_topics, *stock_map.keys()]
 
     raw_lists = await asyncio.gather(*(provider.fetch(t) for t in topics), return_exceptions=True)
     raw_items: list[RawNewsItem] = []
@@ -115,6 +133,9 @@ async def sync_news() -> dict:
         if chash in seen:
             continue
         related = _extract_entities(clean_title)
+        ticker = stock_map.get(raw.topic)
+        if ticker:
+            related["securities"] = [ticker]
         seen[chash] = {
             "id": chash, "title": clean_title, "normalized_title": norm, "url": raw.url,
             "publisher": raw.publisher, "published_at": raw.published_at, "related": related,
@@ -192,7 +213,7 @@ async def _persist(seen: dict, clusters: list[dict], injection_flags: int, reten
 
 
 def _merge_related(items: list[dict]) -> dict:
-    out: dict[str, set[str]] = {"indices": set(), "sectors": set(), "macro": set()}
+    out: dict[str, set[str]] = {"indices": set(), "sectors": set(), "macro": set(), "securities": set()}
     for it in items:
         for k in out:
             out[k].update(it.get(k, []))

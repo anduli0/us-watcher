@@ -125,7 +125,7 @@ export function NavBar() {
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur-md">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3">
         <Link href="/" className="flex items-center gap-2 shrink-0">
           <span className="grid h-8 w-8 place-items-center rounded-lg bg-accent/15 text-accent font-bold">US</span>
           <div className="leading-tight">

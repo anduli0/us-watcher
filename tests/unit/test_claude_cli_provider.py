@@ -46,8 +46,12 @@ async def test_generate_text_parses_result_and_usage(provider, monkeypatch):
     assert res.text == "House view prose."
     assert (res.input_tokens, res.output_tokens) == (11, 7)
     assert res.provider == "claude_cli" and res.is_mock is False
-    # .cmd shim must be routed through cmd.exe on Windows.
-    assert seen["cmd"][:2] == ["cmd", "/c"]
+    # The exe is invoked directly, never wrapped in ["cmd", "/c", ...]: CMD
+    # metacharacters (&, |, ") in the system-prompt arg would otherwise break
+    # (e.g. "S&P 500" runs "P 500"). A .cmd shim is handled via shell=True.
+    assert seen["cmd"][0] == r"C:\fake\claude.cmd"
+    assert seen["cmd"][:2] != ["cmd", "/c"]
+    assert seen["kwargs"].get("shell") is (mod.sys.platform == "win32")
     assert "--max-turns" in seen["cmd"] and "-p" in seen["cmd"]
     # Prompt travels via stdin (no argv length/quoting hazards).
     assert seen["kwargs"]["input"] == "user"

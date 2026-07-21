@@ -41,7 +41,7 @@ export default function BriefPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_260px]">
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           {sel && (
             <div className="no-print flex items-center justify-between rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 text-xs">
               <span className="text-accent">{t("brief_viewing_past")}: {sel.date} · {(TYPE_LABEL[sel.type]?.[lang]) ?? sel.type}</span>

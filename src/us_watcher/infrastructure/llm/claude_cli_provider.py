@@ -29,6 +29,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,9 @@ from us_watcher.infrastructure.llm.mock import MockLLMProvider
 from us_watcher.logging_config import get_logger
 
 log = get_logger(__name__)
+
+# Prevent flash-up of a console window on Windows when spawning subprocesses.
+_CREATE_NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0
 
 
 class ClaudeCLIProvider:
@@ -61,7 +65,22 @@ class ClaudeCLIProvider:
 
     def _resolve_exe(self) -> str | None:
         if self._exe is None:
-            self._exe = shutil.which(self._settings.claude_cli_path)
+            found = shutil.which(self._settings.claude_cli_path)
+            # On Windows, prefer claude.exe over claude.cmd/.ps1 to avoid
+            # cmd.exe shell-quoting issues: special chars in system-prompt text
+            # (&, |, ") are interpreted as CMD metacharacters when routed
+            # through cmd /c, e.g. "S&P 500" causes cmd to run "P 500", and
+            # "M&A activity" causes it to run "M" → "'M' is not recognized" error.
+            if found and sys.platform == "win32" and found.lower().endswith((".cmd", ".bat", ".ps1")):
+                # npm shims live at <npm-prefix>/claude.cmd; the real binary is
+                # at <npm-prefix>/node_modules/@anthropic-ai/claude-code/bin/claude.exe
+                npm_dir = Path(found).parent
+                real_exe = (
+                    npm_dir / "node_modules" / "@anthropic-ai" / "claude-code" / "bin" / "claude.exe"
+                )
+                if real_exe.exists():
+                    found = str(real_exe)
+            self._exe = found
         return self._exe
 
     def _child_env(self) -> dict[str, str]:
@@ -91,15 +110,20 @@ class ClaudeCLIProvider:
             exe, "-p", "--output-format", "json", "--max-turns", "1",
             "--model", self._model_for(role), "--system-prompt", system,
         ]
-        # Windows npm shims are .cmd/.ps1 batch wrappers — route through cmd.exe.
-        if exe.lower().endswith((".cmd", ".bat")):
-            cmd = ["cmd", "/c", *cmd]
+        # NOTE: do NOT wrap with ["cmd", "/c", ...] even for .cmd shims.
+        # CMD metacharacters (&, |, ") in the system-prompt argument would be
+        # interpreted by cmd.exe (e.g. "S&P 500" → runs "P 500"; "M&A" → runs
+        # "M"), causing visible "'M' is not recognized" CMD errors.
+        # _resolve_exe() already prefers claude.exe on Windows; on the rare path
+        # where only claude.cmd is available, shell=True handles it safely.
+        use_shell = sys.platform == "win32" and exe.lower().endswith((".cmd", ".bat"))
 
         def _call() -> subprocess.CompletedProcess[str]:
-            return subprocess.run(  # noqa: S603 — fixed argv, prompt via stdin
+            return subprocess.run(  # noqa: S603
                 cmd, input=user, capture_output=True, text=True, encoding="utf-8",
                 errors="replace", cwd=str(self._cwd), env=self._child_env(),
                 timeout=self._settings.llm_cli_timeout_seconds,
+                shell=use_shell, creationflags=_CREATE_NO_WINDOW,
             )
 
         try:
