@@ -197,6 +197,24 @@ async def main() -> None:
             _write(rel, resp.json())
             ok += 1
 
+        # API-shaped mirror (extensionless files) so external consumers — e.g.
+        # the MARKET watcher's serverless build — can point US_WATCHER_BASE_URL
+        # at .../us-watcher/data and reuse the exact live-API paths (no .json
+        # suffix, no query-encoded filename). Korean brief at the bare path.
+        for path, params in [
+            ("/health", {}),
+            ("/api/v1/market/overview", {}),
+            ("/api/v1/market/regime", {}),
+            ("/api/v1/accuracy", {}),
+            ("/api/v1/briefings/latest", {"language": "ko", "briefing_type": "full"}),
+        ]:
+            try:
+                resp = await client.get(path, params=params)
+                if resp.status_code == 200:
+                    _write(path.lstrip("/"), resp.json())  # extensionless
+            except Exception as exc:  # mirror is additive — never fail the build
+                print(f"[snapshot] api-mirror {path} failed: {exc!r}"[:200])
+
         # Data-health signal so a cloud refresh can refuse to publish a snapshot
         # built on MOCK prices (invariant 2): count non-live cards in the overview.
         mock_cards = total_cards = 0
