@@ -24,11 +24,19 @@
 
 * { border-color: hsl(var(--border)); }
 
+/* The page never scrolls/pans horizontally at the viewport level — wide
+   content (tables, nav) scrolls inside its own overflow-x-auto container.
+   `clip` (not `hidden`) so html/body don't become scroll containers. */
+html, body { overflow-x: clip; }
+
 body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
   font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
+  overscroll-behavior-x: none;
+  /* Long unbroken tokens (tickers, URLs) wrap instead of widening the page. */
+  overflow-wrap: break-word;
 }
 
 @layer components {

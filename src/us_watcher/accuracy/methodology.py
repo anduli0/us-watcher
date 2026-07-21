@@ -53,6 +53,20 @@ METHODOLOGY: dict = {
         "tier, and market-regime side; embargoed train/test study, reproducible via "
         "signal_lab) blended with live recommendation outcomes as they mature "
         "(sample-size-weighted, so the system's own track record gradually dominates).",
+        "early_evidence": "Matured short-window LIVE outcomes feed calibration early at an "
+        "explicit discount: 5-day outcomes count toward the 20d bucket at 0.25x their sample "
+        "size (a 5d window covers a quarter of the horizon), so tiny samples barely move the "
+        "prior while a real track record eventually dominates. 1-day outcomes are excluded — "
+        "single-day direction is noise-dominated (measured live: 45.7% hit with positive "
+        "expectancy, avg gain +1.41% vs avg loss -1.03%).",
+        "publishable_edge_gate": "A directional call must clear 60% CALIBRATED confidence "
+        "to be published as committed advice (50% is a pure coin flip; the bar sits a real "
+        "margin above it). Below 60% the call is shown only as WATCH (buy-side) or HOLD "
+        "(sell-side). Measured sell-side priors are 43.6/36.8/34.0% at H20/60/120 — well "
+        "under the bar — so unconfident sells are the biggest leak this gate closes.",
+        "short_horizon_selectivity": "Backtest calibration buckets show only the 70-100 "
+        "score bucket separates at 20d (+5.7% avg forward return vs ~+2% for every bucket "
+        "below); a short-horizon committed buy below score 70 steps down one action level.",
         "regime_gate": "Measured: with the S&P below its 200-DMA, long-signal hit rates "
         "fell to 43-52% (vs 55-65% risk-on) with negative benchmark excess at every "
         "horizon — so in risk-off regimes buy actions need a higher score bar and "

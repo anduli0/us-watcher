@@ -59,6 +59,48 @@ def test_live_rates_shrinkage():
     assert large > 80.0  # 3000 live samples dominate it
 
 
+def test_early_evidence_h5_discounted_into_h20():
+    # Matured 5d live outcomes count toward the 20d bucket at 0.25x their n.
+    base = confidence_target_pct(20, 72.0, "buy", risk_on=True)
+    tiny = confidence_target_pct(20, 72.0, "buy", risk_on=True,
+                                 live_rates={(5, "buy"): (1.0, 12)})
+    big = confidence_target_pct(20, 72.0, "buy", risk_on=True,
+                                live_rates={(5, "buy"): (0.90, 8000)})
+    assert base is not None and tiny is not None and big is not None
+    # 12 h5 samples = 3 effective vs the 300-strong prior: barely a nudge, even
+    # at a perfect 100% hit rate — small n must not swing confidence.
+    assert tiny >= base and tiny - base < 1.0
+    # 8000 h5 samples = 2000 effective: the live track record rightly dominates.
+    assert big > 80.0
+
+
+def test_early_evidence_applies_to_sell_side_too():
+    base = confidence_target_pct(20, 30.0, "sell", risk_on=True)
+    nudged = confidence_target_pct(20, 30.0, "sell", risk_on=True,
+                                   live_rates={(5, "sell"): (1.0, 12)})
+    assert base is not None and nudged is not None
+    assert nudged >= base and nudged - base < 1.0
+
+
+def test_h1_outcomes_never_reach_calibration():
+    # 1d direction is noise-dominated (live: 45.7% hit, positive expectancy) —
+    # even a huge h1 sample must have ZERO effect on any target.
+    base = confidence_target_pct(20, 72.0, "buy", risk_on=True)
+    with_h1 = confidence_target_pct(20, 72.0, "buy", risk_on=True,
+                                    live_rates={(1, "buy"): (1.0, 5000)})
+    assert with_h1 == base
+
+
+def test_early_evidence_stacks_with_matured_same_horizon_outcomes():
+    # Both sources blend: matured 20d at full weight + 5d at the 0.25 discount.
+    only_20 = confidence_target_pct(20, 72.0, "buy", risk_on=True,
+                                    live_rates={(20, "buy"): (0.9, 200)})
+    both = confidence_target_pct(20, 72.0, "buy", risk_on=True,
+                                 live_rates={(20, "buy"): (0.9, 200),
+                                             (5, "buy"): (0.9, 200)})
+    assert only_20 is not None and both is not None and both > only_20
+
+
 def test_action_side_mapping():
     assert action_side(RecAction.STRONG_BUY) == "buy"
     assert action_side(RecAction.ACCUMULATE) == "buy"
@@ -73,9 +115,12 @@ def test_horizon_days_covers_all_display_horizons():
 
 
 def test_calibration_summary_is_transparent():
-    s = calibration_summary({(20, "buy"): (0.6, 42)})
+    s = calibration_summary({(20, "buy"): (0.6, 42), (5, "buy"): (0.75, 12)})
     assert "buy_hit_priors" in s and "regime_hit_at_conviction" in s
     assert s["live_blend"]["h20_buy"] == {"hit": 0.6, "n": 42}
+    # Early evidence is surfaced: raw 5d rates + the documented discount.
+    assert s["live_blend"]["h5_buy"] == {"hit": 0.75, "n": 12}
+    assert s["early_evidence"]["discounts"] == {"h20_from_h5": 0.25}
 
 
 # ---- scoring integration ----

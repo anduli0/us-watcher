@@ -33,6 +33,14 @@ A buy-range score with **low confidence** is demoted to **WATCH** (not forced to
 HOLD). High risk with a sub-buy score → **AVOID** (not SELL). Korean labels:
 강한 매수/매수/분할매수/보유/관망/비중축소/매도/회피.
 
+**Publishable-edge gate**: a directional call must clear **60%** *calibrated*
+confidence to be published as committed advice — 50% is a pure coin flip, so the
+bar sits a real margin above it. Below 60% the call is shown only as WATCH
+(buy-side) or HOLD (sell-side) (`WATCH_CONFIDENCE_FLOOR`). **Short-horizon selectivity**
+(measured): in the point-in-time backtest only the 70–100 score bucket separates
+at 20d (+5.7% avg forward vs ~+2% below), so a short-horizon committed buy below
+score 70 steps down one action level (`SHORT_BUY_HI_CONVICTION_FLOOR`).
+
 ## Capital Migration Score (CMS, 0–100)
 
 `capital_migration_score(components)` over weighted inputs (capex growth, backlog/

@@ -60,6 +60,26 @@ _SELL_HIT_PRIOR: dict[int, float] = {20: 0.436, 60: 0.368, 120: 0.340}
 _PRIOR_N = 300
 _TARGET_MIN, _TARGET_MAX = 25.0, 85.0
 
+# ---- early live evidence (matured short-window outcomes) ---------------------
+# By 2026-07 the system had 1,293 matured LIVE outcomes (h1 n=1281 hit 45.7%,
+# h5 n=12 hit 75%) while every 20/60/120d display horizon was still immature —
+# so NONE of the system's own track record reached calibration. A matured 5-day
+# outcome IS a real live directional result; it counts toward the 20d bucket at
+# an explicit discount of 5/20 = 0.25 of its sample size (a 5d window covers a
+# quarter of the 20d horizon, so 4 early outcomes carry the evidential weight
+# of 1 matured 20d one — small n cannot swing confidence; see the shrinkage
+# math in ``confidence_target_pct``).
+# 1-day outcomes are EXCLUDED entirely: single-day direction is noise-dominated
+# (measured live: hit 45.7% yet positive expectancy — avg gain +1.41% vs avg
+# loss −1.03% — i.e. the daily direction bit carries ~no signal about the 20d
+# outcome; blending it would add noise, not evidence).
+_EARLY_EVIDENCE_DISCOUNT: dict[int, dict[int, float]] = {20: {5: 0.25}}
+# Horizons live_hit_rates() must fetch: the display horizons plus every
+# discounted early-evidence source horizon (h1 deliberately absent).
+_QUERY_HORIZONS: list[int] = sorted(
+    {*_BUY_HIT_PRIOR, *(h for srcs in _EARLY_EVIDENCE_DISCOUNT.values() for h in srcs)}
+)
+
 
 def _tier(total_score: float) -> str:
     if total_score >= 70.0:
@@ -86,7 +106,12 @@ def confidence_target_pct(
     live_rates: dict[tuple[int, str], tuple[float, int]] | None = None,
 ) -> float | None:
     """Empirical confidence target (0-100) for a call, or ``None`` (neutral side
-    / unknown horizon). Prior x regime x conviction, shrunk toward live results."""
+    / unknown horizon). Prior x regime x conviction, shrunk toward live results.
+
+    Live evidence = matured same-horizon outcomes at FULL weight plus matured
+    short-window outcomes at the documented ``_EARLY_EVIDENCE_DISCOUNT`` (e.g.
+    12 matured 5d outcomes = 3 effective samples vs a 300-strong prior — barely
+    a nudge; thousands would rightly dominate). Never fabricated precision."""
     if side not in ("buy", "sell") or horizon_days not in _BUY_HIT_PRIOR:
         return None
     if side == "buy":
@@ -96,21 +121,32 @@ def confidence_target_pct(
     else:
         prior = _SELL_HIT_PRIOR[horizon_days]
 
-    hit = prior
-    n_live = 0
+    num = prior * _PRIOR_N
+    den = float(_PRIOR_N)
     if live_rates:
         live = live_rates.get((horizon_days, side))
         if live is not None:
             live_hit, n_live = live
-            hit = (prior * _PRIOR_N + live_hit * n_live) / (_PRIOR_N + n_live)
+            num += live_hit * n_live
+            den += n_live
+        for early_h, discount in _EARLY_EVIDENCE_DISCOUNT.get(horizon_days, {}).items():
+            early = live_rates.get((early_h, side))
+            if early is not None:
+                early_hit, early_n = early
+                num += early_hit * (early_n * discount)
+                den += early_n * discount
+    hit = num / den
     return round(max(_TARGET_MIN, min(_TARGET_MAX, hit * 100.0)), 1)
 
 
 async def live_hit_rates() -> dict[tuple[int, str], tuple[float, int]]:
     """Realized directional hit rates from matured outcomes, keyed by
     (horizon_days, side). Buy-side hit = positive absolute return; sell-side
-    hit = negative absolute return. Small/absent samples simply mean the prior
-    keeps dominating — never fabricated."""
+    hit = negative absolute return. Fetches the display horizons AND the
+    early-evidence source horizons (matured 5d outcomes, discounted into the
+    20d bucket by ``confidence_target_pct``; 1d is excluded as noise-dominated).
+    Small/absent samples simply mean the prior keeps dominating — never
+    fabricated."""
     from us_watcher.db.models import Recommendation, RecommendationOutcome
     from us_watcher.infrastructure.db import get_sessionmaker
 
@@ -123,7 +159,7 @@ async def live_hit_rates() -> dict[tuple[int, str], tuple[float, int]]:
                 .join(Recommendation, RecommendationOutcome.recommendation_id == Recommendation.id)
                 .where(RecommendationOutcome.status == "evaluated",
                        RecommendationOutcome.abs_return_pct.is_not(None),
-                       RecommendationOutcome.horizon_days.in_(list(_BUY_HIT_PRIOR)))
+                       RecommendationOutcome.horizon_days.in_(_QUERY_HORIZONS))
             )
         ).all()
 
@@ -154,11 +190,27 @@ def calibration_summary(live_rates: dict[tuple[int, str], tuple[float, int]] | N
             "Confidence is blended toward measured base rates: 5y point-in-time priors "
             "(by horizon, conviction tier, and market-regime side; signal_lab, embargoed) "
             f"shrunk toward live recommendation outcomes with prior weight n={_PRIOR_N}. "
-            "Risk-off regimes also raise the buy-action score bar and cut confidence "
-            "(measured hit-rate drop when the S&P is below its 200-DMA)."
+            "Matured short-window live outcomes count early at an explicit discount (see "
+            "early_evidence). Risk-off regimes also raise the buy-action score bar and cut "
+            "confidence (measured hit-rate drop when the S&P is below its 200-DMA)."
         ),
         "buy_hit_priors": _BUY_HIT_PRIOR,
         "sell_hit_priors": _SELL_HIT_PRIOR,
         "regime_hit_at_conviction": _REGIME_HIT,
-        "live_blend": live_view or {"note": "No matured 20/60/120d outcomes yet — priors dominate."},
+        "early_evidence": {
+            "discounts": {
+                f"h{target}_from_h{src}": disc
+                for target, srcs in _EARLY_EVIDENCE_DISCOUNT.items()
+                for src, disc in srcs.items()
+            },
+            "note": (
+                "Matured 5d live outcomes count toward the 20d bucket at 0.25x their "
+                "sample size (a 5d window covers a quarter of the 20d horizon). 1d "
+                "outcomes are excluded: single-day direction is noise-dominated (live: "
+                "45.7% hit with positive expectancy), so it would add noise, not evidence."
+            ),
+        },
+        "live_blend": live_view or {
+            "note": "No matured 20/60/120d (or discounted 5d) outcomes yet — priors dominate."
+        },
     }

@@ -21,7 +21,7 @@ export default function NewsPage() {
             <article key={c.id} className="card card-hover">
               <div className="flex items-start gap-3">
                 <ImportanceBadge value={c.importance} />
-                <div className="flex-1">
+                <div className="min-w-0 flex-1">
                   <h3 className="text-sm font-semibold leading-snug">{c.headline}</h3>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted">
                     <span>{timeBoth(c.last_seen)}</span>
