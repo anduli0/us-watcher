@@ -1,1 +1,1 @@
-{"status":"ok","app":"US Stock Watcher","version":"0.1.0","time_utc":"2026-08-28T05:26:17.728903+00:00","session":"closed","market_data_provider":"yahoo","news_provider":"google","agent_runtime":"llm","llm_enabled":true}
+{"status":"ok","app":"US Stock Watcher","version":"0.1.0","time_utc":"2026-08-28T15:30:06.341501+00:00","session":"open","market_data_provider":"yahoo","news_provider":"google","agent_runtime":"llm","llm_enabled":true}
