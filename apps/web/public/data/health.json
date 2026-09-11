@@ -1,1 +1,1 @@
-{"status":"ok","app":"US Stock Watcher","version":"0.1.0","time_utc":"2026-09-10T23:12:39.945943+00:00","session":"afterhours","market_data_provider":"yahoo","news_provider":"google","agent_runtime":"llm","llm_enabled":true}
+{"status":"ok","app":"US Stock Watcher","version":"0.1.0","time_utc":"2026-09-11T08:10:15.272717+00:00","session":"premarket","market_data_provider":"yahoo","news_provider":"google","agent_runtime":"llm","llm_enabled":true}
