@@ -1,1 +1,1 @@
-{"database":"ok","redis":{"backend":"fakeredis","connected":false,"detail":"'method_descriptor' object has no attribute '__closure__'"},"market_data":"yahoo","macro":"fred-keyless","news":"google","llm":"configured"}
+{"database":"ok","redis":{"backend":"fakeredis","connected":true,"detail":""},"market_data":"yahoo","macro":"fred-keyless","news":"google","llm":"configured"}
